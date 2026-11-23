@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import base64
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Annotated
