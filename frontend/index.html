@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10243a">
+  <title>Entrega continua | Demo</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/" aria-label="Inicio">NODO<span> / LAB</span></a><span class="badge"><i></i> SISTEMA OPERATIVO</span></header>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">PROYECTO PARCIAL 2 · DEVOPS</p>
+      <h1>Entrega continua,<br><em>con evidencia.</em></h1>
+      <p class="intro">Una aplicación pequeña para demostrar pruebas automatizadas, despliegue condicionado y observabilidad de extremo a extremo.</p>
+      <div class="status"><span class="pulse"></span><span id="health-label">Verificando servicios…</span><span class="status-sep">/</span><span>API <code>/health</code></span></div>
+    </section>
+    <section class="board" aria-labelledby="tasks-heading">
+      <div class="board-head"><div><p class="eyebrow">DEMO INTERACTIVA</p><h2 id="tasks-heading">Lista de tareas</h2></div><span id="task-count" class="count">0 ELEMENTOS</span></div>
+      <form id="task-form"><label class="sr-only" for="task-title">Nueva tarea</label><input id="task-title" name="title" maxlength="120" placeholder="Escribe una tarea para probar el API…" required><button type="submit">Agregar <span aria-hidden="true">↗</span></button></form>
+      <p id="error" class="error" role="alert" hidden></p>
+      <ul id="task-list" aria-live="polite"></ul>
+      <p id="empty-state" class="empty">Aún no hay tareas. Agrega una para iniciar la demostración.</p>
+    </section>
+    <section class="pipeline" aria-label="Etapas del pipeline"><div><b>01</b><span>Commit</span></div><i></i><div><b>02</b><span>Playwright</span></div><i></i><div><b>03</b><span>Docker Hub</span></div><i></i><div><b>04</b><span>EC2</span></div><i></i><div><b>05</b><span>OpenObserve</span></div></section>
+  </main>
+  <footer><span>CI/CD · AWS EC2 · OpenTelemetry</span><span>HECHO PARA APRENDER <b>✳</b></span></footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

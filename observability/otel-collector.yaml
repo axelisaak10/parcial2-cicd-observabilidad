@@ -1,0 +1,50 @@
+extensions:
+  basicauth/openobserve:
+    client_auth:
+      username: ${env:OO_USER}
+      password: ${env:OO_PASSWORD}
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  hostmetrics:
+    root_path: /hostfs
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      disk: {}
+      filesystem: {}
+      load: {}
+      memory: {}
+      network: {}
+      paging: {}
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 256
+  batch: {}
+exporters:
+  otlphttp/openobserve:
+    endpoint: http://openobserve:5080/api/default
+    auth:
+      authenticator: basicauth/openobserve
+    headers:
+      stream-name: default
+service:
+  extensions: [basicauth/openobserve]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/openobserve]
+    metrics:
+      receivers: [otlp, hostmetrics]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/openobserve]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/openobserve]
