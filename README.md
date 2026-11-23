@@ -59,6 +59,6 @@ El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. E
 
 ## URLs
 
-- Repositorio: completar después de crear el repo remoto.
+- Repositorio: https://github.com/axelisaak10/parcial2-cicd-observabilidad
 - Aplicación EC2: completar después del despliegue.
 - OpenObserve: acceso privado por túnel SSH, no publicar credenciales.
