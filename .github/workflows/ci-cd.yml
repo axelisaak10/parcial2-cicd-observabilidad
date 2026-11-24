@@ -99,7 +99,7 @@ jobs:
           printf 'DOCKERHUB_USERNAME=%s\nZO_ROOT_USER_EMAIL=%s\nZO_ROOT_USER_PASSWORD=%s\nIMAGE_TAG=%s\n' \
             "$DOCKERHUB_USERNAME" "$ZO_ROOT_USER_EMAIL" "$ZO_ROOT_USER_PASSWORD" "$IMAGE_TAG" |
             ssh -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes ubuntu@"$EC2_HOST" \
-              'umask 077; cat > ~/parcial2/.env; cd ~/parcial2 && docker compose pull && docker compose up -d --remove-orphans && docker image prune -f'
+              'umask 077; cat > ~/parcial2/.env; cd ~/parcial2 && sudo docker compose pull && sudo docker compose up -d --remove-orphans && sudo docker image prune -f'
       - name: Prepare private OpenObserve tunnel for deploy event
         if: always()
         env:
