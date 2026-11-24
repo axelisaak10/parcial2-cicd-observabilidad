@@ -29,7 +29,6 @@ try:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if otlp_endpoint:
@@ -39,6 +38,7 @@ try:
         tracer_provider = TracerProvider(resource=resource)
         tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/traces")))
         trace.set_tracer_provider(tracer_provider)
+        request_tracer = trace.get_tracer("ci_cd_demo.http")
         meter = metrics.get_meter("ci_cd_demo")
         request_count = meter.create_counter("http.server.request.count", unit="{request}")
         request_duration = meter.create_histogram("http.server.request.duration", unit="s")
@@ -47,8 +47,10 @@ try:
         logging.getLogger().addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
     else:
         request_count = request_duration = None
+        request_tracer = None
 except ImportError:
     request_count = request_duration = None
+    request_tracer = None
 
 
 @asynccontextmanager
@@ -76,7 +78,15 @@ async def request_log(request: Request, call_next):
     response: Response | None = None
     import time
     started = time.perf_counter()
+    span_context = request_tracer.start_as_current_span(f"{request.method} {request.url.path}") if request_tracer else None
     try:
+        if span_context:
+            with span_context as span:
+                span.set_attribute("http.request.method", request.method)
+                span.set_attribute("url.path", request.url.path)
+                response = await call_next(request)
+                span.set_attribute("http.response.status_code", response.status_code)
+                return response
         response = await call_next(request)
         return response
     finally:
@@ -127,5 +137,3 @@ async def complete_task(task_id: int):
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
-if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
-    FastAPIInstrumentor.instrument_app(app)
