@@ -60,5 +60,7 @@ El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. E
 ## URLs
 
 - Repositorio: https://github.com/axelisaak10/parcial2-cicd-observabilidad
+- Imagen API (Docker Hub): https://hub.docker.com/r/34axel/parcial2-api
+- Imagen frontend (Docker Hub): https://hub.docker.com/r/34axel/parcial2-frontend
 - Aplicación EC2: completar después del despliegue.
 - OpenObserve: acceso privado por túnel SSH, no publicar credenciales.
