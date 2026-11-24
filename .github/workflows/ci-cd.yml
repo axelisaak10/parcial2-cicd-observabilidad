@@ -51,7 +51,7 @@ jobs:
         env:
           DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          docker build -t "$DH_USER/parcial2-api:${GITHUB_SHA}" -t "$DH_USER/parcial2-api:latest" ./backend
+          docker build -f backend/Dockerfile -t "$DH_USER/parcial2-api:${GITHUB_SHA}" -t "$DH_USER/parcial2-api:latest" .
           docker build -t "$DH_USER/parcial2-frontend:${GITHUB_SHA}" -t "$DH_USER/parcial2-frontend:latest" ./frontend
           docker push "$DH_USER/parcial2-api:${GITHUB_SHA}"
           docker push "$DH_USER/parcial2-api:latest"
