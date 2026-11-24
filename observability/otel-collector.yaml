@@ -29,7 +29,7 @@ processors:
 exporters:
   otlphttp/openobserve:
     endpoint: http://openobserve:5080/api/default
-    metrics_endpoint: http://openobserve:5080/api/default/v1/metrics_json
+    metrics_endpoint: http://openobserve:5080/api/default/v1/metrics
     auth:
       authenticator: basicauth/openobserve
     headers:
