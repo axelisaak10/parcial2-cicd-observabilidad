@@ -47,11 +47,12 @@ jobs:
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
       - name: Report test result to OpenObserve
-        if: always()
+        if: always() && (job.status != 'success' || github.event_name == 'pull_request')
         env:
           OO_URL: ${{ secrets.OO_URL }}
           OO_USER: ${{ secrets.OO_USER }}
           OO_PASSWORD: ${{ secrets.OO_PASSWORD }}
+          OO_REQUIRED: "true"
         run: python scripts/report_event.py test "${{ job.status }}"
   deploy:
     needs: tests
@@ -99,7 +100,14 @@ jobs:
           printf 'DOCKERHUB_USERNAME=%s\nZO_ROOT_USER_EMAIL=%s\nZO_ROOT_USER_PASSWORD=%s\nIMAGE_TAG=%s\n' \
             "$DOCKERHUB_USERNAME" "$ZO_ROOT_USER_EMAIL" "$ZO_ROOT_USER_PASSWORD" "$IMAGE_TAG" |
             ssh -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes ubuntu@"$EC2_HOST" \
-              'umask 077; cat > ~/parcial2/.env; cd ~/parcial2 && sudo docker compose pull && sudo docker compose up -d --remove-orphans && sudo docker image prune -f'
+              'umask 077; cat > ~/parcial2/.env; cd ~/parcial2 && sudo docker compose pull && sudo docker compose up -d --remove-orphans && sudo docker image prune -f && for attempt in $(seq 1 60); do code=$(curl -sS --max-time 2 -o /dev/null -w "%{http_code}" http://127.0.0.1:5080/ || true); if [[ "$code" =~ ^[234] ]]; then echo "OpenObserve respondió HTTP $code"; exit 0; fi; sleep 2; done; sudo docker compose ps; exit 1'
+      - name: Report successful tests after deployment is ready
+        env:
+          OO_URL: ${{ secrets.OO_URL }}
+          OO_USER: ${{ secrets.OO_USER }}
+          OO_PASSWORD: ${{ secrets.OO_PASSWORD }}
+          OO_REQUIRED: "true"
+        run: python scripts/report_event.py test success
       - name: Prepare private OpenObserve tunnel for deploy event
         if: always()
         env:
@@ -122,4 +130,5 @@ jobs:
           OO_URL: ${{ secrets.OO_URL }}
           OO_USER: ${{ secrets.OO_USER }}
           OO_PASSWORD: ${{ secrets.OO_PASSWORD }}
+          OO_REQUIRED: "true"
         run: python scripts/report_event.py deploy "${{ job.status }}"
