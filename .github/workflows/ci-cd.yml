@@ -47,7 +47,7 @@ jobs:
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
       - name: Report test result to OpenObserve
-        if: always() && (job.status != 'success' || github.event_name == 'pull_request')
+        if: always()
         env:
           OO_URL: ${{ secrets.OO_URL }}
           OO_USER: ${{ secrets.OO_USER }}
@@ -119,13 +119,6 @@ jobs:
           chmod 600 ~/.ssh/ec2_deploy
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
-      - name: Report successful tests after deployment is ready
-        env:
-          OO_URL: ${{ secrets.OO_URL }}
-          OO_USER: ${{ secrets.OO_USER }}
-          OO_PASSWORD: ${{ secrets.OO_PASSWORD }}
-          OO_REQUIRED: "true"
-        run: python scripts/report_event.py test success
       - name: Report deployment to OpenObserve
         if: always()
         env:

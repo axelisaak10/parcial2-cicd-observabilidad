@@ -57,11 +57,11 @@ La consola de OpenObserve queda ligada a `127.0.0.1:5080`; no tiene exposición 
 ssh -i "$env:USERPROFILE\.ssh\parcial2-cicd-ec2" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$env:USERPROFILE\.ssh\parcial2-ec2-known-hosts-correct" -N -L 5080:127.0.0.1:5080 ubuntu@18.116.201.62
 ```
 
-Después abre `http://localhost:5080`. El flujo validado registra `test` y `deploy` en el stream `ci_pipeline`. El collector recopila CPU, memoria, disco y red del host. Configura paneles para ese stream, trazas de la API y métricas de host; las alarmas requieren definir sus condiciones y un canal de notificación desde OpenObserve.
+Después abre `http://localhost:5080`. El tablero **Parcial 2 CI CD y Observabilidad** tiene siete paneles: eventos `test`/`deploy`, solicitudes y latencia HTTP, CPU, memoria, tráfico de red y trazas de la API. El flujo validado registra eventos en `ci_pipeline`. El JSON exportado del tablero está en [`observability/dashboard.json`](observability/dashboard.json). Las reglas de alerta y su destino de notificación aún deben configurarse desde OpenObserve.
 
 ## Alcance medible
 
-El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. EC2 no expone de forma estándar temperatura física del host en una VM; por eso no se puede afirmar una gráfica de temperatura fiable sin sensor o métrica del proveedor. La aplicación genera trazas automáticas de FastAPI, logs estructurados y métricas OTLP de conteo y latencia por método, ruta y código HTTP.
+El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. EC2 no expone de forma estándar temperatura física del host en una VM; por eso no se puede afirmar una gráfica de temperatura fiable sin sensor o métrica del proveedor. La aplicación emite logs estructurados, métricas OTLP de conteo/latencia por método, ruta y código HTTP, y spans HTTP explícitos. Se verificó la recepción HTTP 200 de logs, métricas y trazas en OpenObserve.
 
 ## URLs
 

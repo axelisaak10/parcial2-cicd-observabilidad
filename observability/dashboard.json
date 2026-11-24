@@ -1,0 +1,304 @@
+{
+  "dashboardId": "7530831026419924997",
+  "title": "Parcial 2 CI CD y Observabilidad",
+  "description": "CI/CD, métricas HTTP, CPU/memoria EC2 y trazas OpenTelemetry.",
+  "role": "",
+  "owner": "admin@parcial2.local",
+  "created": "2026-11-24T03:17:04Z",
+  "panels": [
+    {
+      "id": "Panel_CIEvents",
+      "type": "table",
+      "fields": {
+        "stream": "ci_pipeline",
+        "stream_type": "logs",
+        "x": [],
+        "y": [],
+        "filter": []
+      },
+      "config": {
+        "title": "Ejecuciones CI/CD",
+        "description": "OpenTelemetry / OpenObserve",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT * FROM \"ci_pipeline\" ORDER BY _timestamp DESC LIMIT 100",
+      "queryType": "sql",
+      "customQuery": true
+    },
+    {
+      "id": "Panel_HttpRequests",
+      "type": "line",
+      "fields": {
+        "stream": "http_server_request_count",
+        "stream_type": "metrics",
+        "x": [
+          {
+            "label": "Tiempo",
+            "alias": "x_axis_1",
+            "column": "_timestamp",
+            "color": null,
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "y": [
+          {
+            "label": "Peticiones",
+            "alias": "y_axis_1",
+            "column": "value",
+            "color": "#5960b2",
+            "aggregationFunction": "sum"
+          }
+        ],
+        "filter": []
+      },
+      "config": {
+        "title": "Solicitudes HTTP",
+        "description": "OpenTelemetry / OpenObserve",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, sum(value) AS y_axis_1 FROM \"http_server_request_count\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "customQuery": true
+    },
+    {
+      "id": "Panel_HttpLatency",
+      "type": "line",
+      "fields": {
+        "stream": "http_server_request_duration",
+        "stream_type": "metrics",
+        "x": [
+          {
+            "label": "Tiempo",
+            "alias": "x_axis_1",
+            "column": "_timestamp",
+            "color": null,
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "y": [
+          {
+            "label": "Segundos",
+            "alias": "y_axis_1",
+            "column": "value",
+            "color": "#5960b2",
+            "aggregationFunction": "avg"
+          }
+        ],
+        "filter": []
+      },
+      "config": {
+        "title": "Latencia HTTP",
+        "description": "OpenTelemetry / OpenObserve",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, avg(value) AS y_axis_1 FROM \"http_server_request_duration\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "customQuery": true
+    },
+    {
+      "id": "Panel_Cpu",
+      "type": "line",
+      "fields": {
+        "stream": "system_cpu_time",
+        "stream_type": "metrics",
+        "x": [
+          {
+            "label": "Tiempo",
+            "alias": "x_axis_1",
+            "column": "_timestamp",
+            "color": null,
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "y": [
+          {
+            "label": "CPU",
+            "alias": "y_axis_1",
+            "column": "value",
+            "color": "#5960b2",
+            "aggregationFunction": "avg"
+          }
+        ],
+        "filter": []
+      },
+      "config": {
+        "title": "CPU del host EC2",
+        "description": "OpenTelemetry / OpenObserve",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, avg(value) AS y_axis_1 FROM \"system_cpu_time\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "customQuery": true
+    },
+    {
+      "id": "Panel_Memory",
+      "type": "line",
+      "fields": {
+        "stream": "system_memory_usage",
+        "stream_type": "metrics",
+        "x": [
+          {
+            "label": "Tiempo",
+            "alias": "x_axis_1",
+            "column": "_timestamp",
+            "color": null,
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "y": [
+          {
+            "label": "Bytes",
+            "alias": "y_axis_1",
+            "column": "value",
+            "color": "#5960b2",
+            "aggregationFunction": "avg"
+          }
+        ],
+        "filter": []
+      },
+      "config": {
+        "title": "Memoria del host EC2",
+        "description": "OpenTelemetry / OpenObserve",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, avg(value) AS y_axis_1 FROM \"system_memory_usage\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "customQuery": true
+    },
+    {
+      "id": "Panel_Traces",
+      "type": "table",
+      "fields": {
+        "stream": "default",
+        "stream_type": "traces",
+        "x": [],
+        "y": [],
+        "filter": []
+      },
+      "config": {
+        "title": "Trazas HTTP de API",
+        "description": "OpenTelemetry / OpenObserve",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT * FROM \"default\" ORDER BY _timestamp DESC LIMIT 100",
+      "queryType": "sql",
+      "customQuery": true
+    },
+    {
+      "id": "Panel_Network",
+      "type": "line",
+      "fields": {
+        "stream": "system_network_io",
+        "stream_type": "metrics",
+        "x": [
+          {
+            "label": "Tiempo",
+            "alias": "x_axis_1",
+            "column": "_timestamp",
+            "color": null,
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "y": [
+          {
+            "label": "Bytes",
+            "alias": "y_axis_1",
+            "column": "value",
+            "color": "#5960b2",
+            "aggregationFunction": "sum"
+          }
+        ],
+        "filter": []
+      },
+      "config": {
+        "title": "Tráfico de red EC2",
+        "description": "Bytes de entrada y salida",
+        "show_legends": true,
+        "legends_position": "bottom",
+        "promql_legend": ""
+      },
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, sum(value) AS y_axis_1 FROM \"system_network_io\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "customQuery": true
+    }
+  ],
+  "layouts": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 24,
+      "h": 12,
+      "i": 0,
+      "panelId": "Panel_CIEvents",
+      "static": false
+    },
+    {
+      "x": 0,
+      "y": 12,
+      "w": 24,
+      "h": 12,
+      "i": 1,
+      "panelId": "Panel_HttpRequests",
+      "static": false
+    },
+    {
+      "x": 0,
+      "y": 24,
+      "w": 24,
+      "h": 12,
+      "i": 2,
+      "panelId": "Panel_HttpLatency",
+      "static": false
+    },
+    {
+      "x": 0,
+      "y": 36,
+      "w": 24,
+      "h": 12,
+      "i": 3,
+      "panelId": "Panel_Cpu",
+      "static": false
+    },
+    {
+      "x": 0,
+      "y": 48,
+      "w": 24,
+      "h": 12,
+      "i": 4,
+      "panelId": "Panel_Memory",
+      "static": false
+    },
+    {
+      "x": 0,
+      "y": 60,
+      "w": 24,
+      "h": 12,
+      "i": 5,
+      "panelId": "Panel_Traces",
+      "static": false
+    },
+    {
+      "x": 0,
+      "y": 72,
+      "w": 24,
+      "h": 12,
+      "i": 6,
+      "panelId": "Panel_Network",
+      "static": false
+    }
+  ],
+  "variables": null,
+  "version": 1
+}
