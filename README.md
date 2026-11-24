@@ -45,13 +45,19 @@ Configura estos secrets en **Settings → Secrets and variables → Actions**:
 | `OO_USER` | Usuario OpenObserve |
 | `OO_PASSWORD` | Contraseña OpenObserve |
 
-Los eventos de prueba y despliegue se transmiten incluso si falla el job correspondiente. El job de despliegue depende de `tests` y se ejecuta sólo en `main`; pull requests nunca despliegan. Los eventos quedan en el stream `ci_pipeline`.
+Los eventos de fallas de prueba y de despliegue se transmiten incluso si falla el job correspondiente. Las corridas válidas registran el resultado de pruebas después de que OpenObserve está disponible. El job de despliegue depende de `tests` y se ejecuta sólo en `main`; pull requests nunca despliegan. Los eventos quedan en el stream `ci_pipeline`.
 
 ## Preparar EC2
 
-Usa Ubuntu 24.04 LTS x86_64, al menos 2 vCPU y 4 GB RAM para la demostración con OpenObserve. Autoriza TCP/22 sólo desde tu IP y TCP/80 para la aplicación; no publiques 5080 ni 4317/4318. Instala Docker Engine y Compose plugin, clona el repositorio en `~/parcial2`, crea `~/parcial2/.env` con las variables del ejemplo y credenciales únicas, luego configura los secrets de GitHub. Conserva la clave SSH y contraseñas fuera del repositorio.
+La instancia de demostración activa es Ubuntu x86_64 `t3.small` en `us-east-2`, con 2 GiB de RAM y 2 GiB de swap. OpenObserve puede funcionar con este tamaño, pero 4 GiB o más dan margen para cargas mayores. El grupo de seguridad permite TCP/80 y TCP/22; SSH usa una llave Ed25519 y debe restringirse a rangos de confianza cuando sea posible. No publiques 5080 ni 4317/4318. El workflow instala Docker Engine y Compose plugin, configura `~/parcial2/.env` con permisos privados y actualiza los servicios después de las pruebas. Conserva las credenciales y claves fuera del repositorio.
 
-La consola de OpenObserve queda ligada a `127.0.0.1:5080`; accede con un túnel SSH (`ssh -L 5080:127.0.0.1:5080 ubuntu@<EC2_HOST>`) y abre `http://localhost:5080`. Crea paneles de logs (`ci_pipeline` y logs de aplicación), trazas, métricas `http.server.request.count` y `http.server.request.duration`, y métricas de host `system.cpu`, `system.memory`, `system.network`, `system.filesystem`. Las alarmas se configuran desde OpenObserve sobre esos streams.
+La consola de OpenObserve queda ligada a `127.0.0.1:5080`; no tiene exposición pública. En PowerShell, abre el túnel y deja esa terminal activa:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\parcial2-cicd-ec2" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$env:USERPROFILE\.ssh\parcial2-ec2-known-hosts-correct" -N -L 5080:127.0.0.1:5080 ubuntu@18.116.201.62
+```
+
+Después abre `http://localhost:5080`. El flujo validado registra `test` y `deploy` en el stream `ci_pipeline`. El collector recopila CPU, memoria, disco y red del host. Configura paneles para ese stream, trazas de la API y métricas de host; las alarmas requieren definir sus condiciones y un canal de notificación desde OpenObserve.
 
 ## Alcance medible
 
@@ -62,5 +68,5 @@ El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. E
 - Repositorio: https://github.com/axelisaak10/parcial2-cicd-observabilidad
 - Imagen API (Docker Hub): https://hub.docker.com/r/34axel/parcial2-api
 - Imagen frontend (Docker Hub): https://hub.docker.com/r/34axel/parcial2-frontend
-- Aplicación EC2: completar después del despliegue.
-- OpenObserve: acceso privado por túnel SSH, no publicar credenciales.
+- Aplicación EC2: http://18.116.201.62/ (salud: http://18.116.201.62/health)
+- OpenObserve: http://localhost:5080 tras iniciar el túnel SSH; credenciales fuera del repositorio.

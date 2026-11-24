@@ -84,7 +84,7 @@ jobs:
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy
           chmod 600 ~/.ssh/ec2_deploy
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes ubuntu@"$EC2_HOST" 'if [ -d ~/parcial2/observability/otel-collector.yaml ]; then rmdir ~/parcial2/observability/otel-collector.yaml; fi; mkdir -p ~/parcial2/observability'
+          ssh -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes ubuntu@"$EC2_HOST" 'if [ -d ~/parcial2/observability/otel-collector.yaml ]; then sudo rmdir ~/parcial2/observability/otel-collector.yaml; fi; if [ -d ~/parcial2/observability ] && [ -z "$(ls -A ~/parcial2/observability)" ]; then sudo rmdir ~/parcial2/observability; fi; mkdir -p ~/parcial2/observability'
       - name: Copy deployment configuration to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
