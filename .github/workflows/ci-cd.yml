@@ -18,7 +18,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: playwright install --with-deps chromium
+      - run: playwright install chromium
       - name: Start application
         run: nohup uvicorn backend.app:app --host 127.0.0.1 --port 8000 > /tmp/ci-cd-api.log 2>&1 &
       - name: Wait for application
