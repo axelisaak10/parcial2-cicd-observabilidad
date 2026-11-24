@@ -5,6 +5,8 @@ services:
       OTEL_SERVICE_NAME: ci-cd-demo-api
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=production
     depends_on: [otel-collector]
     restart: unless-stopped
