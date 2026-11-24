@@ -30,6 +30,22 @@ jobs:
           exit 1
       - name: Run API and browser tests
         run: pytest -q
+      - name: Prepare private OpenObserve tunnel
+        if: always()
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          if [[ -z "$EC2_HOST" || -z "$EC2_SSH_KEY" || -z "$EC2_KNOWN_HOSTS" ]]; then
+            echo "EC2 secrets unavailable; skipping private OpenObserve tunnel."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy
+          chmod 600 ~/.ssh/ec2_deploy
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
       - name: Report test result to OpenObserve
         if: always()
         env:
@@ -57,27 +73,64 @@ jobs:
           docker push "$DH_USER/parcial2-api:latest"
           docker push "$DH_USER/parcial2-frontend:${GITHUB_SHA}"
           docker push "$DH_USER/parcial2-frontend:latest"
+      - name: Prepare deployment directory on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
+          script: mkdir -p ~/parcial2
       - name: Copy deployment configuration to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
           source: "docker-compose.yml,observability/otel-collector.yaml"
           target: "~/parcial2"
       - name: Deploy to EC2 after passing tests
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          ZO_ROOT_USER_EMAIL: ${{ secrets.OO_USER }}
+          ZO_ROOT_USER_PASSWORD: ${{ secrets.OO_PASSWORD }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
+          envs: IMAGE_TAG,DOCKERHUB_USERNAME,ZO_ROOT_USER_EMAIL,ZO_ROOT_USER_PASSWORD
           script: |
             cd ~/parcial2
-            export IMAGE_TAG=${{ github.sha }}
-            export DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
+            umask 077
+            cat > .env <<EOF
+            DOCKERHUB_USERNAME=$DOCKERHUB_USERNAME
+            ZO_ROOT_USER_EMAIL=$ZO_ROOT_USER_EMAIL
+            ZO_ROOT_USER_PASSWORD=$ZO_ROOT_USER_PASSWORD
+            IMAGE_TAG=$IMAGE_TAG
+            EOF
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
+      - name: Prepare private OpenObserve tunnel for deploy event
+        if: always()
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          if [[ -z "$EC2_HOST" || -z "$EC2_SSH_KEY" || -z "$EC2_KNOWN_HOSTS" ]]; then
+            echo "EC2 secrets unavailable; skipping private OpenObserve tunnel."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy
+          chmod 600 ~/.ssh/ec2_deploy
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
       - name: Report deployment to OpenObserve
         if: always()
         env:
