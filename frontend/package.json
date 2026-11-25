@@ -1,0 +1,12 @@
+{
+  "name": "parcial2-cicd-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:ci": "jest --ci --coverage --coverageReporters=text --coverageReporters=lcov",
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "jest": "29.7.0"
+  }
+}

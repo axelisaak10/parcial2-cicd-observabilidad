@@ -1,9 +1,9 @@
 const API = window.API_BASE || "";
+const { renderTasks, formatTaskCount } = window.TaskView;
 const list = document.querySelector("#task-list");
 const empty = document.querySelector("#empty-state");
 const count = document.querySelector("#task-count");
 const error = document.querySelector("#error");
-const escapeHtml = (value) => { const node = document.createElement("span"); node.textContent = value; return node.innerHTML; };
 
 async function request(path, options) {
   const response = await fetch(`${API}${path}`, { headers: { "Content-Type": "application/json" }, ...options });
@@ -13,9 +13,9 @@ async function request(path, options) {
 
 async function loadTasks() {
   const tasks = await request("/api/tasks");
-  list.innerHTML = tasks.map(task => `<li class="${task.done ? "done" : ""}"><span class="task-title">${escapeHtml(task.title)}</span>${task.done ? "<span aria-label='Completada'>✓</span>" : `<button class="task-action" data-id="${task.id}" aria-label="Completar ${escapeHtml(task.title)}">Completar ↗</button>`}</li>`).join("");
+  list.innerHTML = renderTasks(tasks);
   empty.hidden = tasks.length > 0;
-  count.textContent = `${tasks.length} ${tasks.length === 1 ? "ELEMENTO" : "ELEMENTOS"}`;
+  count.textContent = formatTaskCount(tasks.length);
 }
 
 document.querySelector("#task-form").addEventListener("submit", async event => {

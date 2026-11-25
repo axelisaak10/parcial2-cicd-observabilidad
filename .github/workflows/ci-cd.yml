@@ -1,14 +1,18 @@
 name: CI and deploy
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  tests:
+  backend-tests:
+    name: Backend pytest and coverage
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -17,20 +21,110 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - run: pip install -r requirements-dev.txt
-      - run: playwright install chromium
-      - name: Start application
-        run: nohup uvicorn backend.app:app --host 127.0.0.1 --port 8000 > /tmp/ci-cd-api.log 2>&1 &
-      - name: Wait for application
+      - name: Install Python dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Test API and collect coverage
+        run: pytest -q --cov=backend.app --cov-report=xml:backend-coverage.xml --cov-report=term-missing tests/test_api.py
+      - name: Save backend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend-coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend-tests:
+    name: Frontend Jest and build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Jest unit tests and coverage
+        run: npm run test:ci
+      - name: Save frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Build static frontend
+        run: npm run build
+      - name: Save frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7
+
+  playwright-e2e:
+    name: Playwright E2E suite (full stack)
+    needs: [backend-tests, frontend-tests]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install Python and Chromium dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          playwright install --with-deps chromium
+      - name: Start FastAPI and frontend
+        run: |
+          nohup uvicorn backend.app:app --host 127.0.0.1 --port 8000 > /tmp/parcial2-api.log 2>&1 &
+      - name: Wait for application health
         run: |
           for attempt in {1..30}; do
-            curl --fail http://127.0.0.1:8000/health && exit 0
+            if curl --fail --silent http://127.0.0.1:8000/health; then exit 0; fi
             sleep 1
           done
+          cat /tmp/parcial2-api.log
           exit 1
-      - name: Run API and browser tests
-        run: pytest -q
-      - name: Prepare private OpenObserve tunnel
+      - name: Run Playwright browser tests
+        run: pytest -q tests/test_e2e.py
+      - name: Save browser-test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report-tests:
+    name: Report CI execution to OpenObserve
+    needs: [backend-tests, frontend-tests, playwright-e2e]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine aggregate test result
+        id: suite
+        env:
+          BACKEND_RESULT: ${{ needs.backend-tests.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-tests.result }}
+          E2E_RESULT: ${{ needs.playwright-e2e.result }}
+        run: |
+          if [[ "$BACKEND_RESULT" == success && "$FRONTEND_RESULT" == success && "$E2E_RESULT" == success ]]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failure" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Open private OpenObserve tunnel
         if: always()
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -38,33 +132,36 @@ jobs:
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
           if [[ -z "$EC2_HOST" || -z "$EC2_SSH_KEY" || -z "$EC2_KNOWN_HOSTS" ]]; then
-            echo "EC2 secrets unavailable; skipping private OpenObserve tunnel."
+            echo "EC2 secrets unavailable; the reporter will skip if OO_URL is also unavailable."
             exit 0
           fi
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy
-          chmod 600 ~/.ssh/ec2_deploy
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_report
+          chmod 600 ~/.ssh/ec2_report
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
-      - name: Report test result to OpenObserve
+          ssh -i ~/.ssh/ec2_report -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
+      - name: Send test result event
         if: always()
         env:
           OO_URL: ${{ secrets.OO_URL }}
           OO_USER: ${{ secrets.OO_USER }}
           OO_PASSWORD: ${{ secrets.OO_PASSWORD }}
           OO_REQUIRED: "true"
-        run: python scripts/report_event.py test "${{ job.status }}"
-  deploy:
-    needs: tests
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+          TEST_STATUS: ${{ steps.suite.outputs.status }}
+        run: python scripts/report_event.py test "${TEST_STATUS:-failure}"
+
+  build-and-push:
+    name: Build and push Docker images
+    needs: [backend-tests, frontend-tests, playwright-e2e, report-tests]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.backend-tests.result == 'success' && needs.frontend-tests.result == 'success' && needs.playwright-e2e.result == 'success' && needs.report-tests.result == 'success'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and publish images
+      - name: Build and publish tagged images
         env:
           DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
@@ -74,6 +171,14 @@ jobs:
           docker push "$DH_USER/parcial2-api:latest"
           docker push "$DH_USER/parcial2-frontend:${GITHUB_SHA}"
           docker push "$DH_USER/parcial2-frontend:latest"
+
+  deploy:
+    name: Deploy stack to AWS EC2
+    needs: [backend-tests, frontend-tests, playwright-e2e, report-tests, build-and-push]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.backend-tests.result == 'success' && needs.frontend-tests.result == 'success' && needs.playwright-e2e.result == 'success' && needs.report-tests.result == 'success' && needs.build-and-push.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
       - name: Configure verified SSH access to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -85,13 +190,13 @@ jobs:
           chmod 600 ~/.ssh/ec2_deploy
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
           ssh -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes ubuntu@"$EC2_HOST" 'if [ -d ~/parcial2/observability/otel-collector.yaml ]; then sudo rmdir ~/parcial2/observability/otel-collector.yaml; fi; if [ -d ~/parcial2/observability ] && [ -z "$(ls -A ~/parcial2/observability)" ]; then sudo rmdir ~/parcial2/observability; fi; mkdir -p ~/parcial2/observability'
-      - name: Copy deployment configuration to EC2
+      - name: Copy deployment configuration
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
           scp -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes docker-compose.yml ubuntu@"$EC2_HOST":parcial2/
           scp -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes observability/otel-collector.yaml ubuntu@"$EC2_HOST":parcial2/observability/
-      - name: Deploy to EC2 after passing tests
+      - name: Deploy tagged images after all tests pass
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           IMAGE_TAG: ${{ github.sha }}
@@ -110,16 +215,12 @@ jobs:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
         run: |
-          if [[ -z "$EC2_HOST" || -z "$EC2_SSH_KEY" || -z "$EC2_KNOWN_HOSTS" ]]; then
-            echo "EC2 secrets unavailable; skipping private OpenObserve tunnel."
-            exit 0
-          fi
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_deploy
-          chmod 600 ~/.ssh/ec2_deploy
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2_report
+          chmod 600 ~/.ssh/ec2_report
           printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/ec2_deploy -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
-      - name: Report deployment to OpenObserve
+          ssh -i ~/.ssh/ec2_report -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -fN -L 5080:127.0.0.1:5080 ubuntu@"$EC2_HOST"
+      - name: Report deployment event to OpenObserve
         if: always()
         env:
           OO_URL: ${{ secrets.OO_URL }}

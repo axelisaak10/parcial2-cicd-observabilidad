@@ -1,13 +1,17 @@
 # Entrega continua y observabilidad en AWS EC2
 
-Aplicación de demostración para el Proyecto Parcial 2. Incluye frontend, API FastAPI, pruebas pytest y Playwright, publicación condicional de imágenes Docker, despliegue remoto por SSH y telemetría OpenTelemetry hacia OpenObserve.
+Aplicación de demostración para el Proyecto Parcial 2. Mantiene un frontend JavaScript estático y una API FastAPI. El pipeline prueba backend, frontend y navegador por separado, informa el resultado a OpenObserve y sólo después construye las imágenes y despliega a EC2.
 
 ## Arquitectura
 
 ```mermaid
 flowchart LR
-  GH[GitHub Actions] -->|pytest + Playwright| TEST[Validación]
-  TEST -->|solo si aprueba| DH[Docker Hub]
+  GH[GitHub Actions] --> B[pytest + cobertura]
+  GH --> F[Jest + build frontend]
+  B --> E[Playwright E2E]
+  F --> E
+  E --> R[Resultado a OpenObserve]
+  R -->|si todo aprueba| DH[Build + push Docker Hub]
   DH -->|pull de tag SHA| EC2[EC2: frontend + API]
   EC2 -->|OTLP HTTP/gRPC| COL[OpenTelemetry Collector]
   COL --> OO[OpenObserve]
@@ -28,7 +32,7 @@ playwright install chromium
 uvicorn backend.app:app --reload
 ```
 
-En otra terminal: `pytest -q`. La API sirve la UI y endpoints bajo el mismo host. Para ejecutar la pila Docker, copia `.env.example` a `.env`, cambia la contraseña y el usuario de Docker Hub, después ejecuta `docker compose up -d`. En producción, primero publica imágenes; el pipeline lo hace al superar pytest y Playwright.
+Para probar el backend: `pytest -q --cov=backend.app tests/test_api.py`. Para el frontend: desde `frontend`, ejecuta `npm ci`, `npm run test:ci` y `npm run build`. Playwright requiere que la aplicación esté levantada y corre con `pytest -q tests/test_e2e.py`. La API sirve la interfaz local bajo el mismo host; en producción Nginx sirve el frontend en su contenedor y reenvía las llamadas a la API.
 
 ## GitHub Actions y secretos
 
@@ -39,13 +43,13 @@ Configura estos secrets en **Settings → Secrets and variables → Actions**:
 | `DOCKERHUB_USERNAME` | Usuario de Docker Hub |
 | `DOCKERHUB_TOKEN` | Token de acceso Docker Hub con permiso de escritura |
 | `EC2_HOST` | IP pública o DNS de la EC2 |
-| `EC2_USER` | Usuario SSH, por ejemplo `ubuntu` |
 | `EC2_SSH_KEY` | Clave privada SSH completa de despliegue |
-| `OO_URL` | URL base de OpenObserve, por ejemplo `http://<host>:5080` |
+| `EC2_KNOWN_HOSTS` | Clave pública de host SSH conocida para validar el servidor |
+| `OO_URL` | `http://localhost:5080`, reenviado por túnel SSH privado |
 | `OO_USER` | Usuario OpenObserve |
 | `OO_PASSWORD` | Contraseña OpenObserve |
 
-Los eventos de fallas de prueba y de despliegue se transmiten incluso si falla el job correspondiente. Las corridas válidas registran el resultado de pruebas después de que OpenObserve está disponible. El job de despliegue depende de `tests` y se ejecuta sólo en `main`; pull requests nunca despliegan. Los eventos quedan en el stream `ci_pipeline`.
+El flujo tiene jobs separados para pytest/cobertura y Jest/build; Playwright depende de ambos. Un job de reporte se ejecuta siempre y envía el resultado agregado a OpenObserve aunque una prueba falle. El build/push de Docker y el despliegue SSH dependen del éxito de todas las pruebas y del reporte; se ejecutan sólo en `main`. Un fallo de prueba no inicia el job de despliegue. Los eventos quedan en el stream `ci_pipeline`.
 
 ## Preparar EC2
 
@@ -61,7 +65,7 @@ Después abre `http://localhost:5080`. El tablero **Parcial 2 CI CD y Observabil
 
 ## Alcance medible
 
-El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. EC2 no expone de forma estándar temperatura física del host en una VM; por eso no se puede afirmar una gráfica de temperatura fiable sin sensor o métrica del proveedor. La aplicación emite logs estructurados, métricas OTLP de conteo/latencia por método, ruta y código HTTP, y spans HTTP explícitos. Se verificó la recepción HTTP 200 de logs, métricas y trazas en OpenObserve.
+El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. EC2 no expone de forma estándar temperatura física del host en una VM; por eso no se puede afirmar una gráfica de temperatura fiable sin sensor o métrica del proveedor. La aplicación emite logs estructurados, métricas OTLP de conteo, latencia y errores por método, ruta y código HTTP, y spans HTTP explícitos. La demo no usa una base de datos, así que no tiene spans de consultas SQL. Se verificó la recepción HTTP 200 de logs, métricas y trazas en OpenObserve.
 
 ## URLs
 

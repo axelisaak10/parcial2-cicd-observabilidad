@@ -2,8 +2,13 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.coverage
+coverage.xml
 playwright-report/
 test-results/
 *.py[cod]
 
 work/
+frontend/node_modules/
+frontend/coverage/
+frontend/dist/

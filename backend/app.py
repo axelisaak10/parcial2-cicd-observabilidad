@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -41,15 +42,18 @@ try:
         request_tracer = trace.get_tracer("ci_cd_demo.http")
         meter = metrics.get_meter("ci_cd_demo")
         request_count = meter.create_counter("http.server.request.count", unit="{request}")
+        request_error_count = meter.create_counter("http.server.error.count", unit="{error}")
         request_duration = meter.create_histogram("http.server.request.duration", unit="s")
         logger_provider = LoggerProvider(resource=resource)
         logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/logs")))
         logging.getLogger().addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
     else:
         request_count = request_duration = None
+        request_error_count = None
         request_tracer = None
 except ImportError:
     request_count = request_duration = None
+    request_error_count = None
     request_tracer = None
 
 
@@ -83,26 +87,51 @@ async def request_log(request: Request, call_next):
         if span_context:
             with span_context as span:
                 span.set_attribute("http.request.method", request.method)
-                span.set_attribute("url.path", request.url.path)
-                response = await call_next(request)
+                try:
+                    response = await call_next(request)
+                except Exception as exc:
+                    span.set_attribute("http.response.status_code", 500)
+                    from opentelemetry.trace import Status, StatusCode
+                    span.record_exception(exc)
+                    span.set_status(Status(StatusCode.ERROR, str(exc)))
+                    raise
+                route = request.scope.get("route")
+                endpoint = getattr(route, "path", request.url.path)
+                span.set_attribute("http.route", endpoint)
                 span.set_attribute("http.response.status_code", response.status_code)
+                if response.status_code >= 500:
+                    from opentelemetry.trace import Status, StatusCode
+                    span.set_status(Status(StatusCode.ERROR))
                 return response
         response = await call_next(request)
         return response
+    except Exception:
+        logger.exception(json.dumps({
+            "event": "http_exception",
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": 500,
+        }))
+        raise
     finally:
         elapsed = time.perf_counter() - started
         code = response.status_code if response else 500
-        attributes = {"http.request.method": request.method, "http.route": request.url.path, "http.response.status_code": code}
+        route = request.scope.get("route")
+        endpoint = getattr(route, "path", request.url.path)
+        attributes = {"http.request.method": request.method, "http.route": endpoint, "http.response.status_code": code}
         if request_count:
             request_count.add(1, attributes)
             request_duration.record(elapsed, attributes)
-        logger.info(
-            '{"event":"http_request","method":"%s","path":"%s","status_code":%s,"duration_seconds":%.6f}',
-            request.method,
-            request.url.path,
-            code,
-            elapsed,
-        )
+            if code >= 400:
+                request_error_count.add(1, attributes)
+        logger.info(json.dumps({
+            "event": "http_request",
+            "method": request.method,
+            "path": endpoint,
+            "status_code": code,
+            "duration_seconds": round(elapsed, 6),
+            "timestamp_unix_ns": time.time_ns(),
+        }))
 
 
 @app.get("/health")
