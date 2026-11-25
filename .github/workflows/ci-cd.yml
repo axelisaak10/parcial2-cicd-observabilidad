@@ -84,7 +84,10 @@ jobs:
           pip install -r requirements-dev.txt
           playwright install --with-deps chromium
       - name: Start FastAPI and frontend
+        env:
+          DATABASE_PATH: /tmp/parcial2-inventory-e2e.db
         run: |
+          rm -f /tmp/parcial2-inventory-e2e.db /tmp/parcial2-inventory-e2e.db-shm /tmp/parcial2-inventory-e2e.db-wal
           nohup uvicorn backend.app:app --host 127.0.0.1 --port 8000 > /tmp/parcial2-api.log 2>&1 &
       - name: Wait for application health
         run: |

@@ -3,30 +3,78 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#10243a">
-  <title>Entrega continua | Demo</title>
+  <meta name="theme-color" content="#f5f7f4">
+  <meta name="description" content="Panel de control para productos, existencias y alertas de inventario.">
+  <title>Stockroom — Gestión de inventario</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="/" aria-label="Inicio">NODO<span> / LAB</span></a><span class="badge"><i></i> SISTEMA OPERATIVO</span></header>
-  <main>
-    <section class="hero">
-      <p class="eyebrow">PROYECTO PARCIAL 2 · DEVOPS</p>
-      <h1>Entrega continua,<br><em>con evidencia.</em></h1>
-      <p class="intro">Una aplicación pequeña para demostrar pruebas automatizadas, despliegue condicionado y observabilidad de extremo a extremo.</p>
-      <div class="status"><span class="pulse"></span><span id="health-label">Verificando servicios…</span><span class="status-sep">/</span><span>API <code>/health</code></span></div>
+  <aside class="sidebar" aria-label="Navegación principal">
+    <a class="brand" href="/" aria-label="Stockroom inicio"><span class="brand-mark">S</span><span>stockroom<span class="brand-dot">.</span></span></a>
+    <p class="nav-caption">ESPACIO DE TRABAJO</p>
+    <a class="nav-link active" href="#inventory" aria-current="page"><span class="nav-icon">▦</span> Inventario</a>
+    <a class="nav-link" href="#low-stock" id="low-stock-link"><span class="nav-icon">◷</span> Alertas de stock <span id="nav-alert-count" class="nav-count">0</span></a>
+    <div class="sidebar-bottom"><span class="online-dot"></span><span id="health-label">Conectando con la API…</span></div>
+  </aside>
+
+  <main class="main" id="inventory">
+    <header class="topbar"><div class="breadcrumb">Almacén <span>/</span> <strong>Inventario</strong></div><div class="top-actions"><span class="api-pill"><i></i> <span id="api-state">API conectando</span></span><span class="avatar" aria-label="Usuario administrador">A</span></div></header>
+
+    <section class="page-intro">
+      <div><p class="eyebrow">OPERACIONES <span>·</span> CONTROL DE EXISTENCIAS</p><h1>Inventario</h1><p class="subtitle">Administra tus productos, existencias y niveles de reposición desde un solo lugar.</p></div>
+      <button id="add-product" class="primary-button" type="button"><span>＋</span> Agregar producto</button>
     </section>
-    <section class="board" aria-labelledby="tasks-heading">
-      <div class="board-head"><div><p class="eyebrow">DEMO INTERACTIVA</p><h2 id="tasks-heading">Lista de tareas</h2></div><span id="task-count" class="count">0 ELEMENTOS</span></div>
-      <form id="task-form"><label class="sr-only" for="task-title">Nueva tarea</label><input id="task-title" name="title" maxlength="120" placeholder="Escribe una tarea para probar el API…" required><button type="submit">Agregar <span aria-hidden="true">↗</span></button></form>
-      <p id="error" class="error" role="alert" hidden></p>
-      <ul id="task-list" aria-live="polite"></ul>
-      <p id="empty-state" class="empty">Aún no hay tareas. Agrega una para iniciar la demostración.</p>
+
+    <section class="stats" aria-label="Resumen del inventario">
+      <article class="stat-card"><div class="stat-label">Productos registrados <span class="stat-icon indigo">▦</span></div><div id="stat-products" class="stat-value">—</div><div class="stat-foot">SKUs activos en el catálogo</div></article>
+      <article class="stat-card"><div class="stat-label">Unidades disponibles <span class="stat-icon blue">▤</span></div><div id="stat-units" class="stat-value">—</div><div class="stat-foot">Piezas en todas las ubicaciones</div></article>
+      <article class="stat-card"><div class="stat-label">Stock bajo <span class="stat-icon amber">⌁</span></div><div id="stat-low" class="stat-value">—</div><div class="stat-foot">Productos que requieren atención</div></article>
+      <article class="stat-card"><div class="stat-label">Valor del inventario <span class="stat-icon green">＄</span></div><div id="stat-value" class="stat-value">—</div><div class="stat-foot">Valuación al costo registrado</div></article>
     </section>
-    <section class="pipeline" aria-label="Etapas del pipeline"><div><b>01</b><span>Commit</span></div><i></i><div><b>02</b><span>Playwright</span></div><i></i><div><b>03</b><span>Docker Hub</span></div><i></i><div><b>04</b><span>EC2</span></div><i></i><div><b>05</b><span>OpenObserve</span></div></section>
+
+    <section class="inventory-card" aria-labelledby="catalog-title">
+      <div class="catalog-heading"><div><h2 id="catalog-title">Catálogo de productos</h2><p>Consulta y actualiza las existencias de tu almacén.</p></div><span id="result-count" class="result-count">0 productos</span></div>
+      <div class="toolbar">
+        <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Buscar producto</span><input id="search" type="search" placeholder="Buscar por nombre, SKU o ubicación…" autocomplete="off"></label>
+        <label class="filter-label"><span class="sr-only">Categoría</span><select id="category-filter"><option value="">Todas las categorías</option></select></label>
+        <label class="filter-label"><span class="sr-only">Estado de existencias</span><select id="stock-filter"><option value="all">Todos los niveles</option><option value="in_stock">Disponible</option><option value="low">Stock bajo</option><option value="out">Agotado</option></select></label>
+      </div>
+      <p id="feedback" class="feedback" role="status" aria-live="polite" hidden></p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">PRODUCTO</th><th scope="col">CATEGORÍA</th><th scope="col">PRECIO UNITARIO</th><th scope="col">EXISTENCIAS</th><th scope="col">UBICACIÓN</th><th scope="col">ESTADO</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+          <tbody id="product-list"></tbody>
+        </table>
+        <div id="empty-state" class="empty-state" hidden><span class="empty-icon">▦</span><strong id="empty-title">Aún no hay productos</strong><span id="empty-copy">Agrega tu primer producto para comenzar a controlar el inventario.</span><button id="empty-add" class="text-button" type="button">Agregar producto <span>↗</span></button></div>
+      </div>
+      <div class="table-footer"><span>Los cambios se guardan en la base de datos del sistema.</span><button id="refresh" type="button" class="refresh-button"><span>↻</span> Actualizar</button></div>
+    </section>
+    <footer class="page-footer"><span>STOCKROOM INVENTORY</span><span>CI/CD · AWS EC2 · OpenTelemetry</span></footer>
   </main>
-  <footer><span>CI/CD · AWS EC2 · OpenTelemetry</span><span>HECHO PARA APRENDER <b>✳</b></span></footer>
-  <script src="/task-view.js" defer></script>
+
+  <dialog id="product-dialog" class="product-dialog" aria-labelledby="dialog-title">
+    <form id="product-form" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">CATÁLOGO</p><h2 id="dialog-title">Agregar producto</h2></div><button id="close-dialog" class="icon-button" type="button" aria-label="Cerrar">×</button></div>
+      <input id="product-id" type="hidden">
+      <div class="form-grid">
+        <label>SKU <span>*</span><input id="sku" name="sku" minlength="2" maxlength="32" pattern="[A-Za-z0-9._-]+" placeholder="Ej. ELEC-001" required></label>
+        <label>Nombre del producto <span>*</span><input id="name" name="name" minlength="2" maxlength="100" placeholder="Ej. Audífonos inalámbricos" required></label>
+        <label>Categoría <span>*</span><input id="category" name="category" minlength="2" maxlength="40" placeholder="Ej. Electrónica" required></label>
+        <label>Ubicación <span>*</span><input id="location" name="location" minlength="2" maxlength="80" placeholder="Ej. Estante A-03" required></label>
+        <label>Existencias actuales <span>*</span><input id="quantity" name="quantity" type="number" min="0" max="1000000" step="1" value="0" required></label>
+        <label>Nivel mínimo de stock <span>*</span><input id="min-stock" name="min_stock" type="number" min="0" max="1000000" step="1" value="5" required></label>
+        <label>Precio unitario (MXN) <span>*</span><input id="unit-price" name="unit_price" type="number" min="0" max="10000000" step="0.01" value="0" required></label>
+        <label class="full-field">Descripción <textarea id="description" name="description" maxlength="300" rows="3" placeholder="Detalles adicionales del producto"></textarea></label>
+      </div>
+      <p id="form-error" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button id="cancel-dialog" class="secondary-button" type="button">Cancelar</button><button id="save-product" class="primary-button" type="submit">Guardar producto <span>↗</span></button></div>
+    </form>
+  </dialog>
+
+  <script src="/inventory-view.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

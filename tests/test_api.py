@@ -1,5 +1,6 @@
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+import pytest
 
 from backend import app as backend_app
 
@@ -10,6 +11,11 @@ tasks = backend_app.tasks
 def setup_function():
     tasks.clear()
     backend_app.next_id = 1
+
+
+@pytest.fixture(autouse=True)
+def isolated_inventory_database(tmp_path, monkeypatch):
+    monkeypatch.setattr(backend_app, "DATABASE_PATH", tmp_path / "inventory.db")
 
 
 def test_health_endpoint():
@@ -54,6 +60,70 @@ def test_complete_unknown_task_returns_not_found():
     with TestClient(app) as client:
         response = client.patch("/api/tasks/999")
     assert response.status_code == 404
+
+
+def test_inventory_create_list_and_summary():
+    payload = {
+        "sku": "TOOL-001", "name": " Taladro inalámbrico ", "category": "Herramientas",
+        "quantity": 4, "min_stock": 5, "unit_price": 1200.5, "location": "Estante A-1"
+    }
+    with TestClient(app) as client:
+        created = client.post("/api/inventory", json=payload)
+        listed = client.get("/api/inventory")
+        summary = client.get("/api/inventory/summary")
+    assert created.status_code == 201
+    assert created.json()["name"] == "Taladro inalámbrico"
+    assert listed.json() == [created.json()]
+    assert summary.json() == {"products": 1, "units": 4, "out_of_stock": 0, "low_stock": 1, "inventory_value": 4802.0}
+
+
+def test_inventory_filters_by_search_category_and_stock():
+    with TestClient(app) as client:
+        client.post("/api/inventory", json={"sku": "LAP-001", "name": "Laptop", "category": "Tecnología", "quantity": 20, "min_stock": 5, "unit_price": 15000})
+        client.post("/api/inventory", json={"sku": "MOU-001", "name": "Mouse", "category": "Tecnología", "quantity": 2, "min_stock": 5, "unit_price": 250})
+        client.post("/api/inventory", json={"sku": "MUG-001", "name": "Taza", "category": "Hogar", "quantity": 0, "min_stock": 3, "unit_price": 100})
+        search = client.get("/api/inventory", params={"search": "lap"})
+        low = client.get("/api/inventory", params={"category": "Tecnología", "stock": "low"})
+        out = client.get("/api/inventory", params={"stock": "out"})
+    assert [item["sku"] for item in search.json()] == ["LAP-001"]
+    assert [item["sku"] for item in low.json()] == ["MOU-001"]
+    assert [item["sku"] for item in out.json()] == ["MUG-001"]
+
+
+def test_inventory_update_delete_and_missing_item():
+    with TestClient(app) as client:
+        created = client.post("/api/inventory", json={"sku": "BOOK-01", "name": "Libro de pruebas", "category": "Libros", "quantity": 10, "min_stock": 2, "unit_price": 350})
+        item_id = created.json()["id"]
+        changed = client.put(f"/api/inventory/{item_id}", json={"sku": "BOOK-01", "name": "Libro actualizado", "category": "Libros", "quantity": 6, "min_stock": 4, "unit_price": 400})
+        removed = client.delete(f"/api/inventory/{item_id}")
+        missing = client.get(f"/api/inventory/{item_id}")
+    assert created.status_code == 201
+    assert changed.status_code == 200
+    assert changed.json()["name"] == "Libro actualizado"
+    assert changed.json()["quantity"] == 6
+    assert removed.status_code == 204
+    assert missing.status_code == 404
+
+
+def test_inventory_rejects_duplicate_sku_and_invalid_values():
+    with TestClient(app) as client:
+        base = {"sku": "DUP-01", "name": "Producto uno", "category": "Prueba", "quantity": 1, "min_stock": 1, "unit_price": 2}
+        first = client.post("/api/inventory", json=base)
+        duplicate = client.post("/api/inventory", json={**base, "sku": "dup-01"})
+        invalid = client.post("/api/inventory", json={**base, "sku": "bad sku", "quantity": -1})
+    assert first.status_code == 201
+    assert duplicate.status_code == 409
+    assert invalid.status_code == 422
+
+
+def test_inventory_queries_create_database_spans(monkeypatch):
+    tracer = FakeTracer()
+    monkeypatch.setattr(backend_app, "request_tracer", tracer)
+    with TestClient(app) as client:
+        response = client.get("/api/inventory/categories")
+    assert response.status_code == 200
+    assert tracer.span.attributes["db.system"] == "sqlite"
+    assert tracer.span.attributes["db.operation.name"] == "SELECT inventory_categories"
 
 
 class FakeSpan:

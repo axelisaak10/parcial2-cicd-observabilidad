@@ -1,6 +1,12 @@
 # Entrega continua y observabilidad en AWS EC2
 
-Aplicación de demostración para el Proyecto Parcial 2. Mantiene un frontend JavaScript estático y una API FastAPI. El pipeline prueba backend, frontend y navegador por separado, informa el resultado a OpenObserve y sólo después construye las imágenes y despliega a EC2.
+Sistema web de gestión de inventario para el Proyecto Parcial 2. Incluye frontend adaptable a móvil, API FastAPI, persistencia SQLite y operaciones CRUD completas para productos. El pipeline prueba backend, frontend y navegador por separado, informa el resultado a OpenObserve y sólo después construye las imágenes y despliega a EC2.
+
+## Gestión de inventario
+
+El panel permite registrar, buscar, filtrar, editar y eliminar productos. Cada registro almacena SKU único, nombre, categoría, ubicación, existencias, mínimo de stock, precio y descripción. El tablero calcula SKUs, unidades, productos bajo el mínimo y valuación total; resalta productos con stock bajo o agotado.
+
+La API expone `GET/POST /api/inventory`, `GET/PUT/DELETE /api/inventory/{id}`, `GET /api/inventory/summary` y `GET /api/inventory/categories`. Los filtros de lista usan `search`, `category` y `stock` (`all`, `in_stock`, `low`, `out`). En EC2 la base SQLite vive en el volumen persistente `inventory-data`, por lo que reemplazar contenedores no elimina los registros.
 
 ## Arquitectura
 

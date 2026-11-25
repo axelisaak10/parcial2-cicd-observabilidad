@@ -2,6 +2,7 @@ services:
   api:
     image: ${DOCKERHUB_USERNAME:?Define DOCKERHUB_USERNAME en .env}/parcial2-api:${IMAGE_TAG:-latest}
     environment:
+      DATABASE_PATH: /data/inventory.db
       OTEL_SERVICE_NAME: ci-cd-demo-api
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
@@ -9,6 +10,7 @@ services:
       OTEL_METRICS_EXPORTER: none
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=production
     depends_on: [otel-collector]
+    volumes: [inventory-data:/data]
     restart: unless-stopped
   frontend:
     image: ${DOCKERHUB_USERNAME:?Define DOCKERHUB_USERNAME en .env}/parcial2-frontend:${IMAGE_TAG:-latest}
@@ -42,3 +44,4 @@ services:
     restart: unless-stopped
 volumes:
   openobserve-data:
+  inventory-data:
