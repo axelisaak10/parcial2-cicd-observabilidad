@@ -4,8 +4,16 @@ import time
 from playwright.sync_api import Page, expect
 
 
-def test_inventory_crud_and_low_stock_filter(page: Page):
+def sign_in(page: Page):
     page.goto(os.getenv("APP_URL", "http://127.0.0.1:8000"))
+    page.locator("#login-user").fill(os.getenv("INVENTORY_ADMIN_USER", "test-admin"))
+    page.locator("#login-password").fill(os.getenv("INVENTORY_ADMIN_PASSWORD", "test-password"))
+    page.locator("#login-submit").click()
+    expect(page.get_by_role("heading", name="Inventario")).to_be_visible()
+
+
+def test_inventory_crud_and_low_stock_filter(page: Page):
+    sign_in(page)
     expect(page.get_by_role("heading", name="Inventario")).to_be_visible()
     expect(page.get_by_text("API conectada")).to_be_visible()
     initial_count = int(page.locator("#stat-products").inner_text())
@@ -43,7 +51,16 @@ def test_inventory_crud_and_low_stock_filter(page: Page):
 
 
 def test_search_shows_empty_state_and_reset(page: Page):
-    page.goto(os.getenv("APP_URL", "http://127.0.0.1:8000"))
+    sign_in(page)
     page.locator("#search").fill("producto inexistente")
     expect(page.get_by_text("No encontramos productos")).to_be_visible()
     expect(page.locator("#empty-add")).to_be_hidden()
+
+
+def test_remember_me_restores_session_and_logout_ends_it(page: Page):
+    sign_in(page)
+    expect(page.locator("#remember-me")).to_be_checked()
+    page.reload()
+    expect(page.get_by_role("heading", name="Inventario")).to_be_visible()
+    page.locator("#logout").click()
+    expect(page.get_by_role("heading", name="Bienvenido de vuelta")).to_be_visible()

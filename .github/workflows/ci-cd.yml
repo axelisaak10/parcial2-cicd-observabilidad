@@ -72,6 +72,10 @@ jobs:
     name: Playwright E2E suite (full stack)
     needs: [backend-tests, frontend-tests]
     runs-on: ubuntu-24.04
+    env:
+      INVENTORY_ADMIN_USER: test-admin
+      INVENTORY_ADMIN_PASSWORD: test-password
+      INVENTORY_TOKEN_SECRET: gha-e2e-only-inventory-session-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -206,9 +210,12 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           ZO_ROOT_USER_EMAIL: ${{ secrets.OO_USER }}
           ZO_ROOT_USER_PASSWORD: ${{ secrets.OO_PASSWORD }}
+          INVENTORY_ADMIN_USER: ${{ secrets.INVENTORY_ADMIN_USER }}
+          INVENTORY_ADMIN_PASSWORD: ${{ secrets.INVENTORY_ADMIN_PASSWORD }}
+          INVENTORY_TOKEN_SECRET: ${{ secrets.INVENTORY_TOKEN_SECRET }}
         run: |
-          printf 'DOCKERHUB_USERNAME=%s\nZO_ROOT_USER_EMAIL=%s\nZO_ROOT_USER_PASSWORD=%s\nIMAGE_TAG=%s\n' \
-            "$DOCKERHUB_USERNAME" "$ZO_ROOT_USER_EMAIL" "$ZO_ROOT_USER_PASSWORD" "$IMAGE_TAG" |
+          printf 'DOCKERHUB_USERNAME=%s\nZO_ROOT_USER_EMAIL=%s\nZO_ROOT_USER_PASSWORD=%s\nINVENTORY_ADMIN_USER=%s\nINVENTORY_ADMIN_PASSWORD=%s\nINVENTORY_TOKEN_SECRET=%s\nIMAGE_TAG=%s\n' \
+            "$DOCKERHUB_USERNAME" "$ZO_ROOT_USER_EMAIL" "$ZO_ROOT_USER_PASSWORD" "$INVENTORY_ADMIN_USER" "$INVENTORY_ADMIN_PASSWORD" "$INVENTORY_TOKEN_SECRET" "$IMAGE_TAG" |
             ssh -i ~/.ssh/ec2_deploy -o StrictHostKeyChecking=yes ubuntu@"$EC2_HOST" \
               'umask 077; cat > ~/parcial2/.env; cd ~/parcial2 && sudo docker compose pull && sudo docker compose up -d --force-recreate --remove-orphans && sudo docker image prune -f && for attempt in $(seq 1 60); do code=$(curl -sS --max-time 2 -o /dev/null -w "%{http_code}" http://127.0.0.1:5080/ || true); running=$(sudo docker compose ps --status running --services | wc -l); if [[ "$code" =~ ^[234] && "$running" -eq 4 ]]; then echo "OpenObserve respondió HTTP $code; los cuatro servicios están activos"; exit 0; fi; sleep 2; done; sudo docker compose ps; exit 1'
       - name: Prepare private OpenObserve tunnel for deploy event

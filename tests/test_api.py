@@ -16,6 +16,15 @@ def setup_function():
 @pytest.fixture(autouse=True)
 def isolated_inventory_database(tmp_path, monkeypatch):
     monkeypatch.setattr(backend_app, "DATABASE_PATH", tmp_path / "inventory.db")
+    monkeypatch.setenv("INVENTORY_ADMIN_USER", "test-admin")
+    monkeypatch.setenv("INVENTORY_ADMIN_PASSWORD", "test-password")
+    monkeypatch.setenv("INVENTORY_TOKEN_SECRET", "test-secret-key-for-api-tests")
+
+
+def inventory_headers(client):
+    response = client.post("/api/auth/login", json={"username": "test-admin", "password": "test-password"})
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def test_health_endpoint():
@@ -23,6 +32,17 @@ def test_health_endpoint():
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_login_rejects_bad_credentials_and_protects_inventory():
+    with TestClient(app) as client:
+        denied = client.post("/api/auth/login", json={"username": "test-admin", "password": "wrong"})
+        protected = client.get("/api/inventory")
+        logged_in = client.post("/api/auth/login", json={"username": "test-admin", "password": "test-password"})
+        authorized = client.get("/api/inventory", headers={"Authorization": f"Bearer {logged_in.json()['access_token']}"})
+    assert denied.status_code == 401
+    assert protected.status_code == 401
+    assert authorized.status_code == 200
 
 
 def test_create_and_complete_task():
@@ -68,9 +88,10 @@ def test_inventory_create_list_and_summary():
         "quantity": 4, "min_stock": 5, "unit_price": 1200.5, "location": "Estante A-1"
     }
     with TestClient(app) as client:
-        created = client.post("/api/inventory", json=payload)
-        listed = client.get("/api/inventory")
-        summary = client.get("/api/inventory/summary")
+        headers = inventory_headers(client)
+        created = client.post("/api/inventory", json=payload, headers=headers)
+        listed = client.get("/api/inventory", headers=headers)
+        summary = client.get("/api/inventory/summary", headers=headers)
     assert created.status_code == 201
     assert created.json()["name"] == "Taladro inalámbrico"
     assert listed.json() == [created.json()]
@@ -79,12 +100,13 @@ def test_inventory_create_list_and_summary():
 
 def test_inventory_filters_by_search_category_and_stock():
     with TestClient(app) as client:
-        client.post("/api/inventory", json={"sku": "LAP-001", "name": "Laptop", "category": "Tecnología", "quantity": 20, "min_stock": 5, "unit_price": 15000})
-        client.post("/api/inventory", json={"sku": "MOU-001", "name": "Mouse", "category": "Tecnología", "quantity": 2, "min_stock": 5, "unit_price": 250})
-        client.post("/api/inventory", json={"sku": "MUG-001", "name": "Taza", "category": "Hogar", "quantity": 0, "min_stock": 3, "unit_price": 100})
-        search = client.get("/api/inventory", params={"search": "lap"})
-        low = client.get("/api/inventory", params={"category": "Tecnología", "stock": "low"})
-        out = client.get("/api/inventory", params={"stock": "out"})
+        headers = inventory_headers(client)
+        client.post("/api/inventory", json={"sku": "LAP-001", "name": "Laptop", "category": "Tecnología", "quantity": 20, "min_stock": 5, "unit_price": 15000}, headers=headers)
+        client.post("/api/inventory", json={"sku": "MOU-001", "name": "Mouse", "category": "Tecnología", "quantity": 2, "min_stock": 5, "unit_price": 250}, headers=headers)
+        client.post("/api/inventory", json={"sku": "MUG-001", "name": "Taza", "category": "Hogar", "quantity": 0, "min_stock": 3, "unit_price": 100}, headers=headers)
+        search = client.get("/api/inventory", params={"search": "lap"}, headers=headers)
+        low = client.get("/api/inventory", params={"category": "Tecnología", "stock": "low"}, headers=headers)
+        out = client.get("/api/inventory", params={"stock": "out"}, headers=headers)
     assert [item["sku"] for item in search.json()] == ["LAP-001"]
     assert [item["sku"] for item in low.json()] == ["MOU-001"]
     assert [item["sku"] for item in out.json()] == ["MUG-001"]
@@ -92,11 +114,12 @@ def test_inventory_filters_by_search_category_and_stock():
 
 def test_inventory_update_delete_and_missing_item():
     with TestClient(app) as client:
-        created = client.post("/api/inventory", json={"sku": "BOOK-01", "name": "Libro de pruebas", "category": "Libros", "quantity": 10, "min_stock": 2, "unit_price": 350})
+        headers = inventory_headers(client)
+        created = client.post("/api/inventory", json={"sku": "BOOK-01", "name": "Libro de pruebas", "category": "Libros", "quantity": 10, "min_stock": 2, "unit_price": 350}, headers=headers)
         item_id = created.json()["id"]
-        changed = client.put(f"/api/inventory/{item_id}", json={"sku": "BOOK-01", "name": "Libro actualizado", "category": "Libros", "quantity": 6, "min_stock": 4, "unit_price": 400})
-        removed = client.delete(f"/api/inventory/{item_id}")
-        missing = client.get(f"/api/inventory/{item_id}")
+        changed = client.put(f"/api/inventory/{item_id}", json={"sku": "BOOK-01", "name": "Libro actualizado", "category": "Libros", "quantity": 6, "min_stock": 4, "unit_price": 400}, headers=headers)
+        removed = client.delete(f"/api/inventory/{item_id}", headers=headers)
+        missing = client.get(f"/api/inventory/{item_id}", headers=headers)
     assert created.status_code == 201
     assert changed.status_code == 200
     assert changed.json()["name"] == "Libro actualizado"
@@ -107,10 +130,11 @@ def test_inventory_update_delete_and_missing_item():
 
 def test_inventory_rejects_duplicate_sku_and_invalid_values():
     with TestClient(app) as client:
+        headers = inventory_headers(client)
         base = {"sku": "DUP-01", "name": "Producto uno", "category": "Prueba", "quantity": 1, "min_stock": 1, "unit_price": 2}
-        first = client.post("/api/inventory", json=base)
-        duplicate = client.post("/api/inventory", json={**base, "sku": "dup-01"})
-        invalid = client.post("/api/inventory", json={**base, "sku": "bad sku", "quantity": -1})
+        first = client.post("/api/inventory", json=base, headers=headers)
+        duplicate = client.post("/api/inventory", json={**base, "sku": "dup-01"}, headers=headers)
+        invalid = client.post("/api/inventory", json={**base, "sku": "bad sku", "quantity": -1}, headers=headers)
     assert first.status_code == 201
     assert duplicate.status_code == 409
     assert invalid.status_code == 422
@@ -120,7 +144,7 @@ def test_inventory_queries_create_database_spans(monkeypatch):
     tracer = FakeTracer()
     monkeypatch.setattr(backend_app, "request_tracer", tracer)
     with TestClient(app) as client:
-        response = client.get("/api/inventory/categories")
+        response = client.get("/api/inventory/categories", headers=inventory_headers(client))
     assert response.status_code == 200
     assert tracer.span.attributes["db.system"] == "sqlite"
     assert tracer.span.attributes["db.operation.name"] == "SELECT inventory_categories"

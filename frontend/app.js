@@ -6,14 +6,49 @@ const feedback = document.querySelector("#feedback");
 const formError = document.querySelector("#form-error");
 let allProducts = [];
 let feedbackTimer;
+const SESSION_KEY = "stockroom.session.v1";
+const USER_KEY = "stockroom.user.v1";
+
+function savedSession() {
+  return localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || "";
+}
+
+function showInventory(username = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY) || "admin") {
+  document.querySelector("#login-screen").hidden = true;
+  document.querySelector("#sidebar").hidden = false;
+  document.querySelector("#inventory").hidden = false;
+  document.querySelector("#active-user").textContent = username;
+}
+
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(USER_KEY);
+}
+
+function showLogin(message = "") {
+  document.querySelector("#login-screen").hidden = false;
+  document.querySelector("#sidebar").hidden = true;
+  document.querySelector("#inventory").hidden = true;
+  if (message) {
+    document.querySelector("#login-error").textContent = message;
+    document.querySelector("#login-error").hidden = false;
+  }
+}
 
 async function request(path, options = {}) {
+  const token = savedSession();
   const response = await fetch(path, {
     ...options,
-    headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }
+    headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }
   });
   if (response.status === 204) return null;
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    clearSession();
+    showLogin("Tu sesión expiró. Inicia sesión para continuar.");
+  }
   if (!response.ok) throw new Error(data.detail || `Error ${response.status}: ${response.statusText}`);
   return data;
 }
@@ -123,6 +158,54 @@ document.querySelector("#low-stock-link").addEventListener("click", event => {
   loadInventory();
 });
 
+document.querySelector("#login-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const loginError = document.querySelector("#login-error");
+  const button = document.querySelector("#login-submit");
+  const username = document.querySelector("#login-user").value.trim();
+  const password = document.querySelector("#login-password").value;
+  loginError.hidden = true;
+  button.disabled = true;
+  button.innerHTML = 'Validando acceso <span>…</span>';
+  try {
+    const response = await fetch("/api/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || "No pudimos iniciar sesión. Verifica tus datos.");
+    clearSession();
+    const storage = document.querySelector("#remember-me").checked ? localStorage : sessionStorage;
+    storage.setItem(SESSION_KEY, data.access_token);
+    storage.setItem(USER_KEY, data.username);
+    document.querySelector("#login-password").value = "";
+    showInventory(data.username);
+    await loadInventory();
+    announce(`Hola, ${data.username}. Tu inventario está listo.`);
+  } catch (problem) {
+    loginError.textContent = problem.message;
+    loginError.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.innerHTML = 'Iniciar sesión <span>→</span>';
+  }
+});
+
+document.querySelector("#toggle-password").addEventListener("click", event => {
+  const field = document.querySelector("#login-password");
+  const visible = field.type === "password";
+  field.type = visible ? "text" : "password";
+  event.currentTarget.textContent = visible ? "Ocultar" : "Ver";
+  event.currentTarget.setAttribute("aria-label", visible ? "Ocultar contraseña" : "Mostrar contraseña");
+});
+
+document.querySelector("#logout").addEventListener("click", () => {
+  clearSession();
+  document.querySelector("#login-password").value = "";
+  showLogin();
+  document.querySelector("#login-user").focus();
+});
+
 form.addEventListener("submit", async event => {
   event.preventDefault();
   formError.hidden = true;
@@ -175,4 +258,10 @@ request("/health").then(() => {
   document.querySelector("#health-label").textContent = "No se pudo conectar con la API";
   document.querySelector("#api-state").textContent = "API sin conexión";
 });
-loadInventory();
+
+if (savedSession()) {
+  showInventory();
+  loadInventory();
+} else {
+  showLogin();
+}

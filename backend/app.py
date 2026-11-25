@@ -4,12 +4,17 @@ import logging
 import json
 import os
 import sqlite3
+import binascii
+import base64
+import hashlib
+import hmac
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import asynccontextmanager, contextmanager
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -151,6 +156,47 @@ class InventoryInput(BaseModel):
         return values
 
 
+class LoginInput(BaseModel):
+    username: Annotated[str, Field(min_length=1, max_length=80)]
+    password: Annotated[str, Field(min_length=1, max_length=200)]
+
+
+def create_access_token(username: str) -> str:
+    secret = os.getenv("INVENTORY_TOKEN_SECRET", "")
+    payload = json.dumps({"sub": username, "exp": int(time.time()) + 12 * 60 * 60}, separators=(",", ":")).encode()
+    encoded = base64.urlsafe_b64encode(payload).rstrip(b"=")
+    signature = hmac.new(secret.encode(), encoded, hashlib.sha256).digest()
+    return encoded.decode() + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
+
+
+def verify_access_token(token: str) -> str | None:
+    secret = os.getenv("INVENTORY_TOKEN_SECRET", "")
+    admin_user = os.getenv("INVENTORY_ADMIN_USER", "")
+    if not secret or not admin_user:
+        return None
+    try:
+        encoded, supplied_signature = token.split(".", 1)
+        expected_signature = hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).digest()
+        expected = base64.urlsafe_b64encode(expected_signature).rstrip(b"=").decode()
+        if not hmac.compare_digest(supplied_signature, expected):
+            return None
+        padding = "=" * (-len(encoded) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded + padding))
+        if payload.get("sub") != admin_user or int(payload.get("exp", 0)) <= int(time.time()):
+            return None
+        return admin_user
+    except (ValueError, TypeError, UnicodeError, binascii.Error):
+        return None
+
+
+async def require_inventory_admin(authorization: Annotated[str | None, Header()] = None) -> str:
+    if authorization and authorization.lower().startswith("bearer "):
+        user = verify_access_token(authorization[7:].strip())
+        if user:
+            return user
+    raise HTTPException(status_code=401, detail="La sesión no es válida o expiró. Inicia sesión nuevamente.", headers={"WWW-Authenticate": "Bearer"})
+
+
 @app.middleware("http")
 async def request_log(request: Request, call_next):
     response: Response | None = None
@@ -237,8 +283,22 @@ async def complete_task(task_id: int):
     raise HTTPException(status_code=404, detail="Tarea no encontrada")
 
 
+@app.post("/api/auth/login")
+async def login(payload: LoginInput):
+    admin_user = os.getenv("INVENTORY_ADMIN_USER", "")
+    admin_password = os.getenv("INVENTORY_ADMIN_PASSWORD", "")
+    token_secret = os.getenv("INVENTORY_TOKEN_SECRET", "")
+    if not admin_user or not admin_password or not token_secret:
+        raise HTTPException(status_code=503, detail="El acceso de administrador aún no está configurado")
+    if not hmac.compare_digest(payload.username.encode(), admin_user.encode()) or not hmac.compare_digest(payload.password.encode(), admin_password.encode()):
+        logger.warning('{"event":"inventory_login_failed"}')
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    logger.info('{"event":"inventory_login_succeeded"}')
+    return {"access_token": create_access_token(admin_user), "token_type": "bearer", "expires_in": 43200, "username": admin_user}
+
+
 @app.get("/api/inventory/summary")
-async def inventory_summary():
+async def inventory_summary(_user: Annotated[str, Depends(require_inventory_admin)]):
     with database_span("SELECT inventory_summary"):
         with db_connection() as connection:
             row = connection.execute("""
@@ -254,6 +314,7 @@ async def inventory_summary():
 
 @app.get("/api/inventory")
 async def list_inventory(
+    _user: Annotated[str, Depends(require_inventory_admin)],
     search: Annotated[str | None, Query(max_length=100)] = None,
     category: Annotated[str | None, Query(max_length=40)] = None,
     stock: Annotated[str | None, Query(pattern=r"^(all|in_stock|low|out)$")] = "all",
@@ -281,7 +342,7 @@ async def list_inventory(
 
 
 @app.get("/api/inventory/categories")
-async def list_inventory_categories():
+async def list_inventory_categories(_user: Annotated[str, Depends(require_inventory_admin)]):
     with database_span("SELECT inventory_categories"):
         with db_connection() as connection:
             rows = connection.execute("SELECT DISTINCT category FROM inventory_items ORDER BY category COLLATE NOCASE").fetchall()
@@ -289,7 +350,7 @@ async def list_inventory_categories():
 
 
 @app.get("/api/inventory/{item_id}")
-async def get_inventory_item(item_id: int):
+async def get_inventory_item(item_id: int, _user: Annotated[str, Depends(require_inventory_admin)]):
     with database_span("SELECT inventory_item"):
         with db_connection() as connection:
             row = connection.execute("SELECT * FROM inventory_items WHERE id = ?", (item_id,)).fetchone()
@@ -299,7 +360,7 @@ async def get_inventory_item(item_id: int):
 
 
 @app.post("/api/inventory", status_code=201)
-async def create_inventory_item(payload: InventoryInput):
+async def create_inventory_item(payload: InventoryInput, _user: Annotated[str, Depends(require_inventory_admin)]):
     values = payload.clean_values()
     now = datetime.now(timezone.utc).isoformat()
     with database_span("INSERT inventory_item"):
@@ -319,7 +380,7 @@ async def create_inventory_item(payload: InventoryInput):
 
 
 @app.put("/api/inventory/{item_id}")
-async def update_inventory_item(item_id: int, payload: InventoryInput):
+async def update_inventory_item(item_id: int, payload: InventoryInput, _user: Annotated[str, Depends(require_inventory_admin)]):
     values = payload.clean_values()
     now = datetime.now(timezone.utc).isoformat()
     with database_span("UPDATE inventory_item"):
@@ -341,7 +402,7 @@ async def update_inventory_item(item_id: int, payload: InventoryInput):
 
 
 @app.delete("/api/inventory/{item_id}", status_code=204)
-async def delete_inventory_item(item_id: int):
+async def delete_inventory_item(item_id: int, _user: Annotated[str, Depends(require_inventory_admin)]):
     with database_span("DELETE inventory_item"):
         with db_connection() as connection:
             cursor = connection.execute("DELETE FROM inventory_items WHERE id = ?", (item_id,))

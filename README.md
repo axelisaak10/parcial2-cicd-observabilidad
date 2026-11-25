@@ -8,6 +8,8 @@ El panel permite registrar, buscar, filtrar, editar y eliminar productos. Cada r
 
 La API expone `GET/POST /api/inventory`, `GET/PUT/DELETE /api/inventory/{id}`, `GET /api/inventory/summary` y `GET /api/inventory/categories`. Los filtros de lista usan `search`, `category` y `stock` (`all`, `in_stock`, `low`, `out`). En EC2 la base SQLite vive en el volumen persistente `inventory-data`, por lo que reemplazar contenedores no elimina los registros.
 
+El acceso al catálogo requiere usuario y contraseña. La pantalla permite recordar la sesión en el dispositivo; los tokens firmados vencen en 12 horas. El inicio de sesión permanece disponible mientras `/health` y la página pública funcionen.
+
 ## Arquitectura
 
 ```mermaid
@@ -54,6 +56,9 @@ Configura estos secrets en **Settings → Secrets and variables → Actions**:
 | `OO_URL` | `http://localhost:5080`, reenviado por túnel SSH privado |
 | `OO_USER` | Usuario OpenObserve |
 | `OO_PASSWORD` | Contraseña OpenObserve |
+| `INVENTORY_ADMIN_USER` | Usuario para iniciar sesión en el sistema |
+| `INVENTORY_ADMIN_PASSWORD` | Contraseña del administrador de inventario |
+| `INVENTORY_TOKEN_SECRET` | Clave aleatoria para firmar sesiones de 12 horas |
 
 El flujo tiene jobs separados para pytest/cobertura y Jest/build; Playwright depende de ambos. Un job de reporte se ejecuta siempre y envía el resultado agregado a OpenObserve aunque una prueba falle. El build/push de Docker y el despliegue SSH dependen del éxito de todas las pruebas y del reporte; se ejecutan sólo en `main`. Un fallo de prueba no inicia el job de despliegue. Los eventos quedan en el stream `ci_pipeline`.
 
