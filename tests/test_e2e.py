@@ -6,6 +6,7 @@ from playwright.sync_api import Page, expect
 
 def sign_in(page: Page):
     page.goto(os.getenv("APP_URL", "http://127.0.0.1:8000"))
+    expect(page.get_by_role("heading", name="Bienvenido de vuelta")).to_be_visible()
     page.locator("#login-user").fill(os.getenv("INVENTORY_ADMIN_USER", "test-admin"))
     page.locator("#login-password").fill(os.getenv("INVENTORY_ADMIN_PASSWORD", "test-password"))
     page.locator("#login-submit").click()
