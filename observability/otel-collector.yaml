@@ -37,7 +37,6 @@ processors:
 exporters:
   otlphttp/openobserve:
     endpoint: http://openobserve:5080/api/default
-    metrics_endpoint: http://openobserve:5080/api/default/v1/metrics
     headers:
       stream-name: default
       Authorization: Basic ${env:OO_BASIC_AUTH}
