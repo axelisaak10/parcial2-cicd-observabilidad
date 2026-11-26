@@ -35,7 +35,34 @@ processors:
     limit_mib: 256
   batch: {}
 exporters:
-  otlphttp/openobserve:
+  otlphttp/openobserve_metrics:
+    endpoint: http://openobserve:5080/api/default
+    headers:
+      Authorization: Basic ${env:OO_BASIC_AUTH}
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 0s
+  otlphttp/openobserve_logs:
+    endpoint: http://openobserve:5080/api/default
+    headers:
+      stream-name: default
+      Authorization: Basic ${env:OO_BASIC_AUTH}
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 0s
+  otlphttp/openobserve_traces:
     endpoint: http://openobserve:5080/api/default
     headers:
       stream-name: default
@@ -55,12 +82,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/openobserve]
+      exporters: [otlphttp/openobserve_traces]
     metrics:
       receivers: [otlp, hostmetrics, prometheus]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/openobserve]
+      exporters: [otlphttp/openobserve_metrics]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/openobserve]
+      exporters: [otlphttp/openobserve_logs]
