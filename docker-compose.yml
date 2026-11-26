@@ -27,7 +27,7 @@ services:
       ZO_ROOT_USER_PASSWORD: ${ZO_ROOT_USER_PASSWORD:?Define ZO_ROOT_USER_PASSWORD en .env}
       ZO_DATA_DIR: /data
     volumes: ["openobserve-data:/data"]
-    ports: ["127.0.0.1:5080:5080"]
+    ports: ["5080:5080"]
     restart: unless-stopped
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.123.0
