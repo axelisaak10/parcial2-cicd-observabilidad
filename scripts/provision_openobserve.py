@@ -124,24 +124,30 @@ REQUIRED_STREAMS = {
 def wait_for_metrics(timeout_seconds: int = 180) -> None:
     deadline = time.monotonic() + timeout_seconds
     missing = REQUIRED_STREAMS.copy()
+    last_state: dict[str, str] = {}
     while time.monotonic() < deadline:
         result = api("GET", f"/api/{ORG}/streams")
         now_us = int(time.time() * 1_000_000)
         current = {}
+        last_state = {}
         for item in result.get("list", []):
             if item.get("stream_type") != "metrics":
                 continue
             stats = item.get("stats", {})
+            name = item.get("name")
             latest = stats.get("doc_time_max", 0)
             age_us = now_us - latest if latest else None
+            if name in REQUIRED_STREAMS:
+                last_state[name] = f"docs={stats.get('doc_num', 0)}, age={age_us / 1_000_000:.0f}s" if age_us is not None else "no timestamp"
             if stats.get("doc_num", 0) and age_us is not None and -120_000_000 <= age_us <= 120_000_000:
-                current[item.get("name")] = latest
+                current[name] = latest
         missing = REQUIRED_STREAMS - current.keys()
         if not missing:
             print("Telemetría reciente verificada en OpenObserve: API, frontend y host EC2")
             return
         time.sleep(15)
-    raise RuntimeError("Faltan métricas recientes en OpenObserve: " + ", ".join(sorted(missing)))
+    detail = "; ".join(f"{name}: {last_state.get(name, 'stream inexistente')}" for name in sorted(missing))
+    raise RuntimeError("Faltan métricas recientes en OpenObserve: " + detail)
 
 
 def provision_alerts() -> None:
