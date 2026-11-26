@@ -64,15 +64,9 @@ El flujo tiene jobs separados para pytest/cobertura y Jest/build; Playwright dep
 
 ## Preparar EC2
 
-La instancia de demostración activa es Ubuntu x86_64 `t3.small` en `us-east-2`, con 2 GiB de RAM y 2 GiB de swap. OpenObserve puede funcionar con este tamaño, pero 4 GiB o más dan margen para cargas mayores. El grupo de seguridad permite TCP/80 y TCP/22; SSH usa una llave Ed25519 y debe restringirse a rangos de confianza cuando sea posible. No publiques 5080 ni 4317/4318. El workflow instala Docker Engine y Compose plugin, configura `~/parcial2/.env` con permisos privados y actualiza los servicios después de las pruebas. Conserva las credenciales y claves fuera del repositorio.
+La instancia de demostración activa es Ubuntu x86_64 `t3.small` en `us-east-2`, con 2 GiB de RAM y 2 GiB de swap. OpenObserve puede funcionar con este tamaño, pero 4 GiB o más dan margen para cargas mayores. El grupo de seguridad permite TCP/80, TCP/22 y TCP/5080 para la revisión pública. SSH usa una llave Ed25519 y debe restringirse a rangos de confianza cuando sea posible. Los puertos OTLP 4317/4318 permanecen privados. El workflow instala Docker Engine y Compose plugin, configura `~/parcial2/.env` con permisos privados y actualiza los servicios después de las pruebas. Conserva las credenciales y claves fuera del repositorio.
 
-La consola de OpenObserve queda ligada a `127.0.0.1:5080`; no tiene exposición pública. En PowerShell, abre el túnel y deja esa terminal activa:
-
-```powershell
-ssh -i "$env:USERPROFILE\.ssh\parcial2-cicd-ec2" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$env:USERPROFILE\.ssh\parcial2-ec2-known-hosts-correct" -N -L 5080:127.0.0.1:5080 ubuntu@18.116.201.62
-```
-
-Después abre `http://localhost:5080`. El tablero **Parcial 2 CI CD y Observabilidad** tiene siete paneles: eventos `test`/`deploy`, solicitudes y latencia HTTP, CPU, memoria, tráfico de red y trazas de la API. El flujo validado registra eventos en `ci_pipeline`. El JSON exportado del tablero está en [`observability/dashboard.json`](observability/dashboard.json). Las reglas de alerta y su destino de notificación aún deben configurarse desde OpenObserve.
+Para la revisión, OpenObserve está disponible en `http://18.116.201.62:5080/`. El acceso es público por HTTP; usa las credenciales configuradas en el entorno y evita reutilizar contraseñas sensibles. El tablero **Parcial 2 CI CD y Observabilidad** tiene siete paneles: eventos `test`/`deploy`, solicitudes y latencia HTTP, CPU, memoria, tráfico de red y trazas de la API. El flujo validado registra eventos en `ci_pipeline`. El JSON exportado del tablero está en [`observability/dashboard.json`](observability/dashboard.json). Las reglas de alerta y su destino de notificación aún deben configurarse desde OpenObserve.
 
 ## Alcance medible
 
@@ -84,4 +78,4 @@ El collector reporta CPU, memoria, almacenamiento, paginación y red de Linux. E
 - Imagen API (Docker Hub): https://hub.docker.com/r/34axel/parcial2-api
 - Imagen frontend (Docker Hub): https://hub.docker.com/r/34axel/parcial2-frontend
 - Aplicación EC2: http://18.116.201.62/ (salud: http://18.116.201.62/health)
-- OpenObserve: http://localhost:5080 tras iniciar el túnel SSH; credenciales fuera del repositorio.
+- OpenObserve: http://18.116.201.62:5080/ (panel público de revisión; credenciales fuera del repositorio).
