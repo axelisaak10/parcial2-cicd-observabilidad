@@ -93,9 +93,19 @@ try:
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if otlp_endpoint:
-        resource = Resource.create({"service.name": os.getenv("OTEL_SERVICE_NAME", "ci-cd-demo-api")})
+        resource = Resource.create({
+            "service.name": os.getenv("OTEL_SERVICE_NAME", "ci-cd-demo-api"),
+            "deployment.environment": os.getenv("DEPLOYMENT_ENVIRONMENT", "production"),
+        })
         metric_exporter = OTLPMetricExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/metrics")
-        metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[PeriodicExportingMetricReader(metric_exporter)]))
+        metrics.set_meter_provider(MeterProvider(
+            resource=resource,
+            metric_readers=[PeriodicExportingMetricReader(
+                metric_exporter,
+                export_interval_millis=int(os.getenv("OTEL_METRIC_EXPORT_INTERVAL_MS", "15000")),
+                export_timeout_millis=10000,
+            )],
+        ))
         tracer_provider = TracerProvider(resource=resource)
         tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/traces")))
         trace.set_tracer_provider(tracer_provider)
@@ -104,15 +114,16 @@ try:
         request_count = meter.create_counter("http.server.request.count", unit="{request}")
         request_error_count = meter.create_counter("http.server.error.count", unit="{error}")
         request_duration = meter.create_histogram("http.server.request.duration", unit="s")
+        request_active = meter.create_up_down_counter("http.server.active_requests", unit="{request}")
         logger_provider = LoggerProvider(resource=resource)
         logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/logs")))
         logging.getLogger().addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
     else:
-        request_count = request_duration = None
+        request_count = request_duration = request_active = None
         request_error_count = None
         request_tracer = None
 except ImportError:
-    request_count = request_duration = None
+    request_count = request_duration = request_active = None
     request_error_count = None
     request_tracer = None
 
@@ -203,6 +214,11 @@ async def request_log(request: Request, call_next):
     import time
     started = time.perf_counter()
     span_context = request_tracer.start_as_current_span(f"{request.method} {request.url.path}") if request_tracer else None
+    active_attributes = {
+        "http.request.method": request.method,
+    }
+    if request_active:
+        request_active.add(1, active_attributes)
     try:
         if span_context:
             with span_context as span:
@@ -244,6 +260,8 @@ async def request_log(request: Request, call_next):
             request_duration.record(elapsed, attributes)
             if code >= 400:
                 request_error_count.add(1, attributes)
+        if request_active:
+            request_active.add(-1, active_attributes)
         logger.info(json.dumps({
             "event": "http_request",
             "method": request.method,

@@ -232,12 +232,17 @@ def test_http_error_metrics_include_route_and_status(monkeypatch):
     requests = FakeMeasurement()
     errors = FakeMeasurement()
     latency = FakeMeasurement()
+    active = FakeMeasurement()
     monkeypatch.setattr(backend_app, "request_count", requests)
     monkeypatch.setattr(backend_app, "request_error_count", errors)
     monkeypatch.setattr(backend_app, "request_duration", latency)
+    monkeypatch.setattr(backend_app, "request_active", active)
     with TestClient(app) as client:
         response = client.patch("/api/tasks/999")
     assert response.status_code == 404
     assert len(requests.records) == len(errors.records) == len(latency.records) == 1
     assert errors.records[0][1]["http.route"] == "/api/tasks/{task_id}"
     assert errors.records[0][1]["http.response.status_code"] == 404
+    assert [record[0] for record in active.records] == [1, -1]
+    assert all(record[1]["http.request.method"] == "PATCH" for record in active.records)
+    assert all("http.route" not in record[1] for record in active.records)

@@ -1,7 +1,7 @@
 {
   "dashboardId": "7530831026419924997",
   "title": "Parcial 2 CI CD y Observabilidad",
-  "description": "CI/CD, métricas HTTP, CPU/memoria EC2 y trazas OpenTelemetry.",
+  "description": "CI/CD, frontend NGINX, API FastAPI, HTTP RED, CPU/RAM/red EC2 y trazas OpenTelemetry.",
   "role": "",
   "owner": "admin@parcial2.local",
   "created": "2026-11-24T03:17:04Z",
@@ -55,20 +55,20 @@
       },
       "config": {
         "title": "Solicitudes HTTP",
-        "description": "OpenTelemetry / OpenObserve",
+        "description": "Solicitudes por segundo en la API",
         "show_legends": true,
         "legends_position": "bottom",
         "promql_legend": ""
       },
-      "query": "SELECT histogram(_timestamp) AS x_axis_1, sum(value) AS y_axis_1 FROM \"http_server_request_count\" GROUP BY x_axis_1 ORDER BY x_axis_1",
-      "queryType": "sql",
+      "query": "sum(rate(http_server_request_count[1m]))",
+      "queryType": "promql",
       "customQuery": true
     },
     {
       "id": "Panel_HttpLatency",
       "type": "line",
       "fields": {
-        "stream": "http_server_request_duration",
+        "stream": "http_server_request_duration_bucket",
         "stream_type": "metrics",
         "x": [
           {
@@ -91,21 +91,21 @@
         "filter": []
       },
       "config": {
-        "title": "Latencia HTTP",
-        "description": "OpenTelemetry / OpenObserve",
+        "title": "Latencia HTTP p95",
+        "description": "Percentil 95 de latencia de la API",
         "show_legends": true,
         "legends_position": "bottom",
         "promql_legend": ""
       },
-      "query": "SELECT histogram(_timestamp) AS x_axis_1, avg(value) AS y_axis_1 FROM \"http_server_request_duration\" GROUP BY x_axis_1 ORDER BY x_axis_1",
-      "queryType": "sql",
+      "query": "histogram_quantile(0.95, sum(rate(http_server_request_duration_bucket[5m])) by (le))",
+      "queryType": "promql",
       "customQuery": true
     },
     {
       "id": "Panel_Cpu",
       "type": "line",
       "fields": {
-        "stream": "system_cpu_time",
+        "stream": "system_cpu_load_average_1m",
         "stream_type": "metrics",
         "x": [
           {
@@ -128,13 +128,13 @@
         "filter": []
       },
       "config": {
-        "title": "CPU del host EC2",
-        "description": "OpenTelemetry / OpenObserve",
+        "title": "Carga de CPU EC2 (1 min)",
+        "description": "Carga promedio del host en el último minuto",
         "show_legends": true,
         "legends_position": "bottom",
         "promql_legend": ""
       },
-      "query": "SELECT histogram(_timestamp) AS x_axis_1, avg(value) AS y_axis_1 FROM \"system_cpu_time\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, max(value) AS y_axis_1 FROM \"system_cpu_load_average_1m\" GROUP BY x_axis_1 ORDER BY x_axis_1",
       "queryType": "sql",
       "customQuery": true
     },
@@ -166,12 +166,12 @@
       },
       "config": {
         "title": "Memoria del host EC2",
-        "description": "OpenTelemetry / OpenObserve",
+        "description": "Memoria usada en bytes",
         "show_legends": true,
         "legends_position": "bottom",
         "promql_legend": ""
       },
-      "query": "SELECT histogram(_timestamp) AS x_axis_1, avg(value) AS y_axis_1 FROM \"system_memory_usage\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, max(value) AS y_axis_1 FROM \"system_memory_usage\" WHERE state = 'used' GROUP BY x_axis_1 ORDER BY x_axis_1",
       "queryType": "sql",
       "customQuery": true
     },
@@ -223,15 +223,237 @@
         "filter": []
       },
       "config": {
-        "title": "Tráfico de red EC2",
-        "description": "Bytes de entrada y salida",
+        "title": "Ancho de banda EC2",
+        "description": "Tráfico de red en bytes por segundo",
         "show_legends": true,
         "legends_position": "bottom",
         "promql_legend": ""
       },
-      "query": "SELECT histogram(_timestamp) AS x_axis_1, sum(value) AS y_axis_1 FROM \"system_network_io\" GROUP BY x_axis_1 ORDER BY x_axis_1",
-      "queryType": "sql",
+      "query": "sum(rate(system_network_io[1m]))",
+      "queryType": "promql",
       "customQuery": true
+    },
+    {
+      "customQuery": true,
+      "config": {
+        "legends_position": "bottom",
+        "show_legends": true,
+        "description": "OpenTelemetry / OpenObserve",
+        "title": "API: solicitudes en curso",
+        "promql_legend": ""
+      },
+      "type": "line",
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, max(value) AS y_axis_1 FROM \"http_server_active_requests\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "fields": {
+        "stream_type": "metrics",
+        "x": [
+          {
+            "color": null,
+            "aggregationFunction": "histogram",
+            "label": "Tiempo",
+            "column": "_timestamp",
+            "alias": "x_axis_1"
+          }
+        ],
+        "y": [
+          {
+            "color": "#27866a",
+            "aggregationFunction": "max",
+            "label": "Solicitudes",
+            "column": "value",
+            "alias": "y_axis_1"
+          }
+        ],
+        "filter": [],
+        "stream": "http_server_active_requests"
+      },
+      "id": "Panel_BackendActive"
+    },
+    {
+      "customQuery": true,
+      "config": {
+        "legends_position": "bottom",
+        "show_legends": true,
+        "description": "OpenTelemetry / OpenObserve",
+        "title": "API: errores HTTP por minuto",
+        "promql_legend": ""
+      },
+      "type": "line",
+      "query": "sum(rate(http_server_error_count[1m]))",
+      "queryType": "promql",
+      "fields": {
+        "stream_type": "metrics",
+        "x": [
+          {
+            "color": null,
+            "aggregationFunction": "histogram",
+            "label": "Tiempo",
+            "column": "_timestamp",
+            "alias": "x_axis_1"
+          }
+        ],
+        "y": [
+          {
+            "color": "#27866a",
+            "aggregationFunction": "max",
+            "label": "Errores/s",
+            "column": "value",
+            "alias": "y_axis_1"
+          }
+        ],
+        "filter": [],
+        "stream": "http_server_error_count"
+      },
+      "id": "Panel_BackendErrors"
+    },
+    {
+      "customQuery": true,
+      "config": {
+        "legends_position": "bottom",
+        "show_legends": true,
+        "description": "OpenTelemetry / OpenObserve",
+        "title": "Frontend: solicitudes/s",
+        "promql_legend": ""
+      },
+      "type": "line",
+      "query": "sum(rate(nginx_http_requests_total[1m]))",
+      "queryType": "promql",
+      "fields": {
+        "stream_type": "metrics",
+        "x": [
+          {
+            "color": null,
+            "aggregationFunction": "histogram",
+            "label": "Tiempo",
+            "column": "_timestamp",
+            "alias": "x_axis_1"
+          }
+        ],
+        "y": [
+          {
+            "color": "#27866a",
+            "aggregationFunction": "max",
+            "label": "Solicitudes/s",
+            "column": "value",
+            "alias": "y_axis_1"
+          }
+        ],
+        "filter": [],
+        "stream": "nginx_http_requests_total"
+      },
+      "id": "Panel_FrontendRequests"
+    },
+    {
+      "customQuery": true,
+      "config": {
+        "legends_position": "bottom",
+        "show_legends": true,
+        "description": "OpenTelemetry / OpenObserve",
+        "title": "Frontend: conexiones activas",
+        "promql_legend": ""
+      },
+      "type": "line",
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, max(value) AS y_axis_1 FROM \"nginx_connections_active\" GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "queryType": "sql",
+      "fields": {
+        "stream_type": "metrics",
+        "x": [
+          {
+            "color": null,
+            "aggregationFunction": "histogram",
+            "label": "Tiempo",
+            "column": "_timestamp",
+            "alias": "x_axis_1"
+          }
+        ],
+        "y": [
+          {
+            "color": "#27866a",
+            "aggregationFunction": "max",
+            "label": "Conexiones",
+            "column": "value",
+            "alias": "y_axis_1"
+          }
+        ],
+        "filter": [],
+        "stream": "nginx_connections_active"
+      },
+      "id": "Panel_FrontendConnections"
+    },
+    {
+      "id": "Panel_Disk",
+      "customQuery": true,
+      "fields": {
+        "stream_type": "metrics",
+        "y": [
+          {
+            "alias": "y_axis_1",
+            "label": "Bytes/s",
+            "color": "#27866a",
+            "column": "value",
+            "aggregationFunction": "max"
+          }
+        ],
+        "filter": [],
+        "x": [
+          {
+            "alias": "x_axis_1",
+            "label": "Tiempo",
+            "color": null,
+            "column": "_timestamp",
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "stream": "system_disk_io"
+      },
+      "type": "line",
+      "queryType": "promql",
+      "query": "sum(rate(system_disk_io[1m]))",
+      "config": {
+        "legends_position": "bottom",
+        "show_legends": true,
+        "promql_legend": "",
+        "title": "Operaciones de disco EC2",
+        "description": "Actividad de disco por segundo"
+      }
+    },
+    {
+      "id": "Panel_Filesystem",
+      "customQuery": true,
+      "fields": {
+        "stream_type": "metrics",
+        "y": [
+          {
+            "alias": "y_axis_1",
+            "label": "Bytes",
+            "color": "#27866a",
+            "column": "value",
+            "aggregationFunction": "max"
+          }
+        ],
+        "filter": [],
+        "x": [
+          {
+            "alias": "x_axis_1",
+            "label": "Tiempo",
+            "color": null,
+            "column": "_timestamp",
+            "aggregationFunction": "histogram"
+          }
+        ],
+        "stream": "system_filesystem_usage"
+      },
+      "type": "line",
+      "queryType": "sql",
+      "query": "SELECT histogram(_timestamp) AS x_axis_1, max(value) AS y_axis_1 FROM \"system_filesystem_usage\" WHERE state = 'used' GROUP BY x_axis_1 ORDER BY x_axis_1",
+      "config": {
+        "legends_position": "bottom",
+        "show_legends": true,
+        "promql_legend": "",
+        "title": "EC2: espacio de archivos",
+        "description": "OpenTelemetry / OpenObserve"
+      }
     }
   ],
   "layouts": [
@@ -297,6 +519,60 @@
       "i": 6,
       "panelId": "Panel_Network",
       "static": false
+    },
+    {
+      "h": 12,
+      "y": 84.0,
+      "x": 0,
+      "w": 24,
+      "i": 7.0,
+      "static": false,
+      "panelId": "Panel_FrontendRequests"
+    },
+    {
+      "h": 12,
+      "y": 96.0,
+      "x": 0,
+      "w": 24,
+      "i": 8.0,
+      "static": false,
+      "panelId": "Panel_FrontendConnections"
+    },
+    {
+      "h": 12,
+      "y": 108.0,
+      "x": 0,
+      "w": 24,
+      "i": 9.0,
+      "static": false,
+      "panelId": "Panel_BackendActive"
+    },
+    {
+      "h": 12,
+      "y": 120.0,
+      "x": 0,
+      "w": 24,
+      "i": 10.0,
+      "static": false,
+      "panelId": "Panel_BackendErrors"
+    },
+    {
+      "i": 11.0,
+      "w": 24,
+      "static": false,
+      "h": 12,
+      "panelId": "Panel_Disk",
+      "y": 132.0,
+      "x": 0
+    },
+    {
+      "i": 12.0,
+      "w": 24,
+      "static": false,
+      "h": 12,
+      "panelId": "Panel_Filesystem",
+      "y": 144.0,
+      "x": 0
     }
   ],
   "variables": null,

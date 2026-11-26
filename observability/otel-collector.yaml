@@ -1,8 +1,6 @@
 extensions:
-  basicauth/openobserve:
-    client_auth:
-      username: ${env:OO_USER}
-      password: ${env:OO_PASSWORD}
+  file_storage:
+    directory: /var/lib/otelcol/storage
 receivers:
   otlp:
     protocols:
@@ -12,7 +10,8 @@ receivers:
         endpoint: 0.0.0.0:4318
   hostmetrics:
     root_path: /hostfs
-    collection_interval: 30s
+    collection_interval: 15s
+    initial_delay: 0s
     scrapers:
       cpu: {}
       disk: {}
@@ -21,6 +20,14 @@ receivers:
       memory: {}
       network: {}
       paging: {}
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: stockroom-frontend
+          scrape_interval: 15s
+          scrape_timeout: 10s
+          static_configs:
+            - targets: [frontend-metrics:9113]
 processors:
   memory_limiter:
     check_interval: 5s
@@ -30,19 +37,27 @@ exporters:
   otlphttp/openobserve:
     endpoint: http://openobserve:5080/api/default
     metrics_endpoint: http://openobserve:5080/api/default/v1/metrics
-    auth:
-      authenticator: basicauth/openobserve
     headers:
       stream-name: default
+      Authorization: Basic ${env:OO_BASIC_AUTH}
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 0s
 service:
-  extensions: [basicauth/openobserve]
+  extensions: [file_storage]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [otlphttp/openobserve]
     metrics:
-      receivers: [otlp, hostmetrics]
+      receivers: [otlp, hostmetrics, prometheus]
       processors: [memory_limiter, batch]
       exporters: [otlphttp/openobserve]
     logs:
